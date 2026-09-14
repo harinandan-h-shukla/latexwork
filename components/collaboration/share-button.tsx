@@ -166,29 +166,31 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
       </DialogHeader>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="colleague@university.edu"
-            className="flex-1"
-          />
-          <div className="flex gap-2">
-            <Select value={role} onValueChange={(v) => v && setRole(v as Role)}>
-              <SelectTrigger className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="editor">Editor</SelectItem>
-                <SelectItem value="reviewer">Reviewer</SelectItem>
-                <SelectItem value="viewer">Viewer</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleInvite} disabled={inviting} className="shrink-0">
-              Invite
-            </Button>
+        {isOwner && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="colleague@university.edu"
+              className="flex-1"
+            />
+            <div className="flex gap-2">
+              <Select value={role} onValueChange={(v) => v && setRole(v as Role)}>
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="reviewer">Reviewer</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={handleInvite} disabled={inviting} className="shrink-0">
+                Invite
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex items-center gap-2 rounded-lg border p-1.5">
           <Input
@@ -209,7 +211,13 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
                 Anyone with the link can view a read-only copy.
               </span>
             </span>
-            <Switch checked={visibility === "public"} onCheckedChange={handleVisibilityChange} />
+            {isOwner ? (
+              <Switch checked={visibility === "public"} onCheckedChange={handleVisibilityChange} />
+            ) : (
+              <span className="text-xs font-medium text-muted-foreground">
+                {visibility === "public" ? "On" : "Off"}
+              </span>
+            )}
           </label>
           {visibility === "public" && publicLinkUrl && (
             <div className="mt-2 flex items-center gap-2 rounded-lg border bg-muted/30 p-1.5">
@@ -248,7 +256,7 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
                     <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
                       <CrownIcon className="size-3.5" /> Owner
                     </span>
-                  ) : (
+                  ) : isOwner ? (
                     <Select value={c.role} onValueChange={(v) => v && handleRoleChange(c.userId, v as Role)}>
                       <SelectTrigger size="sm" className="w-24 shrink-0">
                         <SelectValue />
@@ -259,6 +267,11 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
                         <SelectItem value="viewer">Viewer</SelectItem>
                       </SelectContent>
                     </Select>
+                  ) : (
+                    // Only the owner may change anyone's role (server-enforced in
+                    // updateCollaboratorRole) — every other viewer of this dialog
+                    // gets a plain read-only label instead of the control.
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground capitalize">{c.role}</span>
                   )}
                   {isOwner && c.role !== "owner" && (
                     <div className="flex shrink-0 gap-0.5">
