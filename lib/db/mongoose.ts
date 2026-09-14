@@ -26,7 +26,15 @@ global.__inkwellMongoose = cache;
 export async function getDb(): Promise<typeof mongoose> {
   if (cache.conn) return cache.conn;
   if (!cache.promise) {
-    cache.promise = mongoose.connect(requireMongoUri(), { bufferCommands: false });
+    cache.promise = mongoose.connect(requireMongoUri(), { bufferCommands: false }).catch((error) => {
+      // Don't leave a rejected promise cached — otherwise a single failed
+      // connection attempt (e.g. a transient network blip to Atlas) would
+      // permanently break every request for the lifetime of this process
+      // (or, on Vercel, this warm serverless instance), since every future
+      // call would just re-await the same rejection instead of retrying.
+      cache.promise = null;
+      throw error;
+    });
   }
   cache.conn = await cache.promise;
   return cache.conn;
