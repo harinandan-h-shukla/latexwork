@@ -151,6 +151,8 @@ export function BibEditor({ fileId, entries, onChange, prefillKey, onPrefillCons
                             e.stopPropagation();
                             handleDelete(entry);
                           }}
+                          title="Delete entry"
+                          aria-label="Delete entry"
                         >
                           <Trash2Icon className="text-destructive" />
                         </Button>

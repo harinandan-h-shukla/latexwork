@@ -56,7 +56,7 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="relative" />}
+        render={<Button variant="ghost" size="icon" className="relative" title="Notifications" aria-label="Notifications" />}
       >
         <BellIcon />
         {unreadCount > 0 && (

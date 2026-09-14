@@ -104,7 +104,13 @@ export function ApiKeysPanel({ projectId }: { projectId: string }) {
               <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-2">
                 <KeyIcon className="size-4 shrink-0 text-muted-foreground" />
                 <code className="flex-1 truncate text-xs">{newKey}</code>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleCopy(newKey)}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleCopy(newKey)}
+                  title="Copy key"
+                  aria-label="Copy key"
+                >
                   <CopyIcon className="size-3.5" />
                 </Button>
               </div>

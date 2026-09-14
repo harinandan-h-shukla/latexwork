@@ -55,7 +55,14 @@ export function SplitPaneEditor({ onClose }: { onClose: () => void }) {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="icon-sm" className="ml-auto size-6" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="ml-auto size-6"
+          onClick={onClose}
+          title="Close split pane"
+          aria-label="Close split pane"
+        >
           <XIcon className="size-3.5" />
         </Button>
       </div>

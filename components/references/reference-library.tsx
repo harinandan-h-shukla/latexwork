@@ -122,7 +122,7 @@ export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: R
                     </p>
                   </div>
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" title="More options" aria-label="More options" />}>
                       <MoreHorizontalIcon />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

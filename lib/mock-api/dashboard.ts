@@ -110,9 +110,19 @@ export async function listProjectDashboardStats(
     customThumbnails.filter((p) => p.thumbnailBlobPathname).map((p) => [String(p._id), String(p._id)])
   );
 
+  // Sequential (one figuresFor() round trip per project, awaited one at a
+  // time in a for-loop) made dashboard load time scale linearly with
+  // project count — the same "very slow with more than a couple of
+  // projects" symptom getRecentActivity's own comment above already
+  // describes and fixes with Promise.all. This function grew that same
+  // per-project await-in-a-loop shape later (when figuresFor()/thumbnails
+  // were added) without getting the same fix — fixing it now to match.
+  const figuresByProject = await Promise.all(
+    projectIds.map(async (projectId) => [projectId, await figuresFor(projectId)] as const)
+  );
+
   const result: Record<string, ProjectDashboardStats> = {};
-  for (const projectId of projectIds) {
-    const figures = await figuresFor(projectId);
+  for (const [projectId, figures] of figuresByProject) {
     result[projectId] = {
       progressPercent: 0,
       referenceCount: referenceCountFor(projectId),

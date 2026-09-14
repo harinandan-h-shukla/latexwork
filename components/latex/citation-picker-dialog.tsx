@@ -220,7 +220,14 @@ export function CitationPickerDialog() {
                     if (e.key === "Enter") void handleSearch();
                   }}
                 />
-                <Button size="icon" variant="outline" disabled={searching} onClick={handleSearch}>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={searching}
+                  onClick={handleSearch}
+                  title="Search"
+                  aria-label="Search"
+                >
                   <SearchIcon className="size-4" />
                 </Button>
               </div>

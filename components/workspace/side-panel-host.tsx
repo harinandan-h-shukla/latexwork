@@ -47,6 +47,8 @@ export function SidePanelHost({ projectId }: { projectId: string }) {
           size="icon"
           className="size-6"
           onClick={() => setActiveSidePanel(null)}
+          title="Close panel"
+          aria-label="Close panel"
         >
           <XIcon className="size-3.5" />
         </Button>
