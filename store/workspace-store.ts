@@ -1,0 +1,297 @@
+import { create } from "zustand";
+import type { Compiler, CompileResult, ProjectFile } from "@/lib/types";
+import type { CodeEditorHandle } from "@/components/editor/code-editor";
+import {
+  createFile,
+  deleteFile,
+  duplicateFile,
+  getCurrentUser,
+  getFileContent,
+  listFiles,
+  moveFile,
+  renameFile,
+  setMainFile,
+  updateFileContent,
+  type CompileOptions,
+  type CreateFileInput,
+} from "@/lib/mock-api";
+import { cancelSmart, compileSmart, detectLocal, resolveCompileSource } from "@/lib/local-compiler/compiler-service";
+import type { LocalCompileFileInput } from "@/lib/local-compiler/types";
+
+export type SidePanelId =
+  | "outline"
+  | "reference"
+  | "papers"
+  | "notes"
+  | "comments"
+  | "review"
+  | "search"
+  | "chat"
+  | "log";
+export type LayoutMode = "split" | "editor-only" | "pdf-only";
+
+export type CursorContext = { type: "cite"; key: string } | null;
+
+let compileRunId = 0;
+
+interface WorkspaceState {
+  projectId: string | null;
+  files: ProjectFile[];
+  isLoadingFiles: boolean;
+  openFileIds: string[];
+  activeFileId: string | null;
+  fileContents: Record<string, string>;
+  dirtyFileIds: Set<string>;
+  compile: CompileResult | null;
+  isCompiling: boolean;
+  activeSidePanel: SidePanelId | null;
+  setActiveSidePanel: (panel: SidePanelId | null) => void;
+  /** Set by the user manually picking a rail icon — suppresses auto-switching until the cursor leaves the current context. */
+  pinnedSidePanel: boolean;
+  editorHandle: CodeEditorHandle | null;
+  setEditorHandle: (handle: CodeEditorHandle | null) => void;
+  layoutMode: LayoutMode;
+  setLayoutMode: (mode: LayoutMode) => void;
+  focusMode: boolean;
+  setFocusMode: (on: boolean) => void;
+  syncTargetLine: { fileId: string; line: number } | null;
+  setSyncTargetLine: (target: { fileId: string; line: number } | null) => void;
+  cursorContext: CursorContext;
+  setCursorContext: (context: CursorContext) => void;
+  citationPickerOpen: boolean;
+  setCitationPickerOpen: (open: boolean) => void;
+
+  loadProject: (projectId: string) => Promise<void>;
+  openFile: (fileId: string) => Promise<void>;
+  closeFile: (fileId: string) => void;
+  setActiveFile: (fileId: string) => void;
+  setFileContent: (fileId: string, content: string) => void;
+  saveFileContent: (fileId: string) => Promise<void>;
+
+  createFileNode: (input: CreateFileInput) => Promise<ProjectFile>;
+  renameFileNode: (fileId: string, name: string) => Promise<void>;
+  deleteFileNode: (fileId: string) => Promise<void>;
+  moveFileNode: (fileId: string, newParentId: string | null) => Promise<void>;
+  duplicateFileNode: (fileId: string) => Promise<void>;
+  setMainFileNode: (fileId: string) => Promise<void>;
+
+  runCompile: (options?: CompileOptions) => Promise<void>;
+  cancelCompile: () => Promise<void>;
+}
+
+export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
+  projectId: null,
+  files: [],
+  isLoadingFiles: false,
+  openFileIds: [],
+  activeFileId: null,
+  fileContents: {},
+  dirtyFileIds: new Set(),
+  compile: null,
+  isCompiling: false,
+  activeSidePanel: null,
+  setActiveSidePanel: (panel) =>
+    set((state) => ({
+      activeSidePanel: state.activeSidePanel === panel ? null : panel,
+      pinnedSidePanel: state.activeSidePanel !== panel,
+    })),
+  pinnedSidePanel: false,
+  editorHandle: null,
+  setEditorHandle: (handle) => set({ editorHandle: handle }),
+  layoutMode: "split",
+  setLayoutMode: (mode) => set({ layoutMode: mode }),
+  focusMode: false,
+  setFocusMode: (on) => set({ focusMode: on }),
+  syncTargetLine: null,
+  setSyncTargetLine: (target) => set({ syncTargetLine: target }),
+  cursorContext: null,
+  setCursorContext: (context) =>
+    set((state) => {
+      if (context?.type === "cite" && !state.pinnedSidePanel) {
+        return { cursorContext: context, activeSidePanel: "reference" };
+      }
+      if (!context && state.activeSidePanel === "reference" && !state.pinnedSidePanel) {
+        return { cursorContext: context, activeSidePanel: null };
+      }
+      return { cursorContext: context };
+    }),
+  citationPickerOpen: false,
+  setCitationPickerOpen: (open) => set({ citationPickerOpen: open }),
+
+  loadProject: async (projectId) => {
+    // Reset every piece of per-project transient state, not just `files` —
+    // this store is a singleton reused across client-side navigation between
+    // two projects' editor pages (confirmed by this action depending on
+    // `projectId` at all rather than running once on mount), so leaving the
+    // old project's open tabs/contents/dirty-flags/compile result in place
+    // meant a freshly-opened project could show the previous project's PDF
+    // until a new compile ran.
+    set({
+      projectId,
+      isLoadingFiles: true,
+      openFileIds: [],
+      activeFileId: null,
+      fileContents: {},
+      dirtyFileIds: new Set(),
+      compile: null,
+      isCompiling: false,
+    });
+    const files = await listFiles(projectId);
+    const main = files.find((f) => f.isMain) ?? files.find((f) => f.type === "file");
+    set({ files, isLoadingFiles: false });
+    if (main) {
+      await get().openFile(main.id);
+    }
+  },
+
+  openFile: async (fileId) => {
+    const { openFileIds, fileContents } = get();
+    if (!openFileIds.includes(fileId)) {
+      set({ openFileIds: [...openFileIds, fileId] });
+    }
+    if (fileContents[fileId] === undefined) {
+      const content = await getFileContent(fileId);
+      set((state) => ({ fileContents: { ...state.fileContents, [fileId]: content } }));
+    }
+    set({ activeFileId: fileId });
+  },
+
+  closeFile: (fileId) => {
+    const { openFileIds, activeFileId } = get();
+    const remaining = openFileIds.filter((id) => id !== fileId);
+    const nextActive =
+      activeFileId === fileId ? (remaining[remaining.length - 1] ?? null) : activeFileId;
+    set({ openFileIds: remaining, activeFileId: nextActive });
+  },
+
+  setActiveFile: (fileId) => set({ activeFileId: fileId }),
+
+  setFileContent: (fileId, content) => {
+    set((state) => ({
+      fileContents: { ...state.fileContents, [fileId]: content },
+      dirtyFileIds: new Set(state.dirtyFileIds).add(fileId),
+    }));
+  },
+
+  saveFileContent: async (fileId) => {
+    const content = get().fileContents[fileId];
+    if (content === undefined) return;
+    await updateFileContent(fileId, content);
+    set((state) => {
+      const next = new Set(state.dirtyFileIds);
+      next.delete(fileId);
+      return { dirtyFileIds: next };
+    });
+  },
+
+  createFileNode: async (input) => {
+    const { projectId } = get();
+    if (!projectId) throw new Error("No project loaded");
+    const file = await createFile(projectId, input);
+    set((state) => ({ files: [...state.files, file] }));
+    return file;
+  },
+
+  renameFileNode: async (fileId, name) => {
+    const updated = await renameFile(fileId, name);
+    set((state) => ({ files: state.files.map((f) => (f.id === fileId ? updated : f)) }));
+  },
+
+  deleteFileNode: async (fileId) => {
+    await deleteFile(fileId);
+    set((state) => ({
+      files: state.files.filter((f) => f.id !== fileId),
+      openFileIds: state.openFileIds.filter((id) => id !== fileId),
+      activeFileId: state.activeFileId === fileId ? null : state.activeFileId,
+    }));
+  },
+
+  moveFileNode: async (fileId, newParentId) => {
+    const updated = await moveFile(fileId, newParentId);
+    set((state) => ({ files: state.files.map((f) => (f.id === fileId ? updated : f)) }));
+  },
+
+  duplicateFileNode: async (fileId) => {
+    const copy = await duplicateFile(fileId);
+    set((state) => ({ files: [...state.files, copy] }));
+  },
+
+  setMainFileNode: async (fileId) => {
+    const { projectId } = get();
+    if (!projectId) return;
+    await setMainFile(projectId, fileId);
+    set((state) => ({
+      files: state.files.map((f) => ({ ...f, isMain: f.id === fileId })),
+    }));
+  },
+
+  runCompile: async (options) => {
+    const { projectId, files, fileContents, compile: inFlight, isCompiling } = get();
+    if (!projectId) return;
+
+    if (isCompiling && inFlight) {
+      cancelSmart(inFlight).catch(() => {});
+    }
+    const myRunId = ++compileRunId;
+    set({ isCompiling: true });
+
+    const compiler: Compiler = options?.compiler ?? "pdflatex";
+    const user = await getCurrentUser();
+    const preference = user.editorDefaults.compilerPreference ?? "prefer-local";
+    const agentInfo = preference === "always-cloud" ? null : await detectLocal();
+    const source = resolveCompileSource(preference, agentInfo, compiler);
+
+    let smartFiles: LocalCompileFileInput[] = [];
+    let mainFilePath = "main.tex";
+    {
+      // Built for both local AND cloud compiles now — the mock cloud
+      // renderer used to reach into a shared client-side store directly for
+      // this, which broke once real project files moved to MongoDB (that
+      // store is never populated for real projects anymore). Passing the
+      // current live file contents explicitly works for both paths and
+      // doesn't depend on where "the current files" happen to be stored.
+      const mainFile = files.find((f) => f.isMain) ?? files.find((f) => f.type === "file" && f.name.endsWith(".tex"));
+      mainFilePath = (mainFile?.path ?? "/main.tex").replace(/^\//, "");
+      const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
+      smartFiles = await Promise.all(
+        textFiles.map(async (f) => ({
+          path: f.path.replace(/^\//, ""),
+          content: fileContents[f.id] ?? (await getFileContent(f.id)),
+          id: f.id,
+        }))
+      );
+    }
+
+    const applyIfCurrent = (partial: CompileResult) => {
+      if (myRunId !== compileRunId) return;
+      set({ compile: partial });
+    };
+
+    const result = await compileSmart(
+      {
+        projectId,
+        mainFile: mainFilePath,
+        files: smartFiles,
+        compiler,
+        draftMode: options?.draftMode,
+        shellEscape: options?.shellEscape,
+        incremental: options?.incremental,
+        customCommand: options?.customCommand,
+        simulateTimeout: options?.simulateTimeout,
+      },
+      source,
+      applyIfCurrent
+    );
+
+    if (myRunId === compileRunId) {
+      set({ compile: result, isCompiling: false });
+    }
+  },
+
+  cancelCompile: async () => {
+    const { compile } = get();
+    if (!compile) return;
+    await cancelSmart(compile);
+    set({ isCompiling: false });
+  },
+}));

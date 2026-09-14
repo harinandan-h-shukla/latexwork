@@ -1,0 +1,38 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[numbers]{natbib}
+\usepackage{authblk}
+
+\title{Paper Title}
+\author[1]{First Author}
+\affil[1]{Department, University, City, Country}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This is an arXiv-style preprint template using the standard article class
+with common preprint packages (natbib for numbered citations, authblk for
+author affiliations, hyperref for links).
+\end{abstract}
+
+\section{Introduction}
+This is the introduction.
+
+\section{Related Work}
+This is the related work section~\citep{example2024}.
+
+\section{Method}
+This is the method section.
+
+\section{Conclusion}
+This is the conclusion.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

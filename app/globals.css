@@ -1,0 +1,259 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-border-strong: var(--border-strong);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary-accent: var(--secondary-accent);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-gradient-primary-from: var(--gradient-primary-from);
+  --color-gradient-primary-to: var(--gradient-primary-to);
+  --color-gradient-research-from: var(--gradient-research-from);
+  --color-gradient-research-to: var(--gradient-research-to);
+  --color-gradient-build-from: var(--gradient-build-from);
+  --color-gradient-build-to: var(--gradient-build-to);
+  --color-gradient-warning-from: var(--gradient-warning-from);
+  --color-gradient-warning-to: var(--gradient-warning-to);
+}
+
+/* Palette v2 — neutral graphite surfaces + a single restrained accent,
+   replacing the earlier indigo-heavy "Research OS" palette outright (not a
+   contrast tweak on top of it). Direction follows the pattern used by
+   dense, content-first editor/SaaS tools (e.g. Linear's near-black canvas +
+   one functional accent, flat semantic colors, tight radius) rather than a
+   colorful/gradient-driven look — see the design-research notes in the
+   session for the sources this was checked against. Plain hex, one format
+   throughout, so the palette is easy to eyeball and adjust as a whole. */
+:root {
+  --background: #f7f7f8;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #3558e8;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f2;
+  --secondary-foreground: #18181b;
+  --muted: #f0f0f2;
+  --muted-foreground: #52525b;
+  --accent: #ebf0ff;
+  --accent-foreground: #3558e8;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #3558e8;
+  --chart-1: #3558e8;
+  --chart-2: #0d9488;
+  --chart-3: #d97706;
+  --chart-4: #dc2626;
+  --chart-5: #8b5cf6;
+  --radius: 0.5rem;
+  --sidebar: #f0f0f2;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #3558e8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ebf0ff;
+  --sidebar-accent-foreground: #3558e8;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #3558e8;
+
+  --surface-secondary: #f0f0f2;
+  --surface-elevated: #ffffff;
+  --text-secondary: #52525b;
+  --text-tertiary: #71717a;
+  --border-strong: #d4d4d8;
+  --primary-hover: #2a46c4;
+  --primary-soft: #ebf0ff;
+  --secondary-accent: #0d9488;
+  --secondary-soft: #f0fdfa;
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --error: #dc2626;
+  --error-soft: #fef2f2;
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+
+  /* Signal/accent gradients only — never full-surface backgrounds. Reserved
+     for primary CTAs and the build-success badge. Stops are brand/semantic
+     hexes, identical in light and dark. */
+  --gradient-primary-from: #3558e8;
+  --gradient-primary-to: #6d5bd0;
+  --gradient-research-from: #3558e8;
+  --gradient-research-to: #0d9488;
+  --gradient-build-from: #0d9488;
+  --gradient-build-to: #16a34a;
+  --gradient-warning-from: #f59e0b;
+  --gradient-warning-to: #ea580c;
+}
+
+.dark {
+  --background: #0b0b0d;
+  --foreground: #f2f2f3;
+  --card: #151517;
+  --card-foreground: #f2f2f3;
+  --popover: #1c1c1f;
+  --popover-foreground: #f2f2f3;
+  --primary: #6e85ff;
+  --primary-foreground: #0b0b0d;
+  --secondary: #1c1c1f;
+  --secondary-foreground: #f2f2f3;
+  --muted: #1c1c1f;
+  --muted-foreground: #a1a1aa;
+  --accent: #1b2247;
+  --accent-foreground: #8fa0ff;
+  --destructive: #f87171;
+  --border: #26262a;
+  --input: #2e2e33;
+  --ring: #6e85ff;
+  --chart-1: #6e85ff;
+  --chart-2: #2dd4bf;
+  --chart-3: #fbbf24;
+  --chart-4: #f87171;
+  --chart-5: #a78bfa;
+  --sidebar: #111113;
+  --sidebar-foreground: #f2f2f3;
+  --sidebar-primary: #6e85ff;
+  --sidebar-primary-foreground: #0b0b0d;
+  --sidebar-accent: #1b2247;
+  --sidebar-accent-foreground: #8fa0ff;
+  --sidebar-border: #26262a;
+  --sidebar-ring: #6e85ff;
+
+  --surface-secondary: #111113;
+  --surface-elevated: #1c1c1f;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #8a8a93;
+  --border-strong: #34343a;
+  --primary-hover: #8296ff;
+  --primary-soft: #1b2247;
+  --secondary-accent: #2dd4bf;
+  --secondary-soft: #0f2e2b;
+  --success: #34d399;
+  --success-soft: #0f2e22;
+  --warning: #fbbf24;
+  --warning-soft: #332405;
+  --error: #f87171;
+  --error-soft: #341313;
+  --info: #60a5fa;
+  --info-soft: #122236;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Gradient accents — signals, not decoration. See the --gradient-*-from/-to
+   tokens above for where each is meant to be used (primary CTA, Research rail
+   active state, build-success badge, warning callouts). Plain CSS gradients,
+   no images/canvas, identical across light/dark since the stops are brand hexes. */
+@layer utilities {
+  .bg-gradient-primary {
+    background-image: linear-gradient(135deg, var(--gradient-primary-from), var(--gradient-primary-to));
+  }
+  .bg-gradient-research {
+    background-image: linear-gradient(135deg, var(--gradient-research-from), var(--gradient-research-to));
+  }
+  .bg-gradient-build {
+    background-image: linear-gradient(135deg, var(--gradient-build-from), var(--gradient-build-to));
+  }
+  .bg-gradient-warning {
+    background-image: linear-gradient(135deg, var(--gradient-warning-from), var(--gradient-warning-to));
+  }
+  .text-gradient-primary {
+    background-image: linear-gradient(135deg, var(--gradient-primary-from), var(--gradient-primary-to));
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Glass chrome — deliberately scoped to static app chrome (top bars, rails,
+   side panels) that doesn't scroll or repaint constantly, never the code
+   editor or PDF canvas: those stay opaque flat surfaces for text legibility
+   during extended reading/typing and to avoid compositing cost on a
+   frequently-scrolling surface. Moderate blur radius, not maximal, to keep
+   the GPU cost bounded. */
+@layer utilities {
+  .glass-surface {
+    background-color: color-mix(in oklch, var(--card) 88%, transparent);
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    border-color: color-mix(in oklch, var(--border) 80%, transparent);
+  }
+  .glass-surface-subtle {
+    background-color: color-mix(in oklch, var(--card) 94%, transparent);
+    backdrop-filter: blur(10px) saturate(130%);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
+    border-color: color-mix(in oklch, var(--border) 88%, transparent);
+  }
+}
