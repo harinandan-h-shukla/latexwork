@@ -14,6 +14,7 @@ import type { ProjectFile } from "@/lib/types";
 import { delay, id, mockDb } from "@/lib/mock-api/db";
 import { getDb } from "@/lib/db/mongoose";
 import { ProjectFileModel, ProjectModel, type ProjectFileDoc } from "@/lib/db/models/project";
+import { uploadBinaryFile } from "@/lib/storage/blob-storage";
 import type { HydratedDocument } from "mongoose";
 
 const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
@@ -36,6 +37,7 @@ function toProjectFile(doc: HydratedDocument<ProjectFileDoc>): ProjectFile {
     mimeType: obj.mimeType ?? undefined,
     thumbnailUrl: obj.thumbnailUrl ?? undefined,
     linkedUrl: obj.linkedUrl ?? undefined,
+    blobUrl: obj.blobUrl ?? undefined,
     createdAt: new Date(obj.createdAt as Date).toISOString(),
     updatedAt: new Date(obj.updatedAt as Date).toISOString(),
     content: obj.content ?? undefined,
@@ -149,6 +151,9 @@ function seedFilesForProject(projectId: string): void {
 
 export interface ZipImportEntry {
   path: string;
+  /** Text content when !isBinary. When isBinary, this is instead the
+   * entry's raw bytes base64-encoded (uploaded to object storage below,
+   * not stored in this field afterward). */
   content: string;
   isBinary: boolean;
   sizeBytes: number;
@@ -191,6 +196,12 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
     const name = lastSlash === -1 ? cleanPath : cleanPath.slice(lastSlash + 1);
     if (!name) continue;
     const parentId = await ensureFolder(folderPath);
+    let blobUrl: string | undefined;
+    if (entry.isBinary && entry.content) {
+      const bytes = Buffer.from(entry.content, "base64");
+      const uploaded = await uploadBinaryFile(`${projectId}/${cleanPath}`, bytes, entry.mimeType);
+      blobUrl = uploaded.url;
+    }
     const file = await ProjectFileModel.create({
       projectId,
       parentId,
@@ -201,6 +212,7 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
       isBinary: entry.isBinary,
       sizeBytes: entry.sizeBytes,
       mimeType: entry.mimeType,
+      blobUrl,
       content: entry.isBinary ? undefined : entry.content,
     } as never);
     created.push(file);
@@ -536,6 +548,9 @@ export interface UploadFileInput {
   sizeBytes: number;
   mimeType?: string;
   isBinary: boolean;
+  /** Text content when !isBinary. When isBinary, this is instead the
+   * file's raw bytes base64-encoded — the actual upload path for real
+   * projects (see uploadBinaryFile), not stored in this field afterward. */
   content?: string;
 }
 
@@ -545,6 +560,12 @@ export async function uploadFiles(projectId: string, files: UploadFileInput[]): 
     const created: ProjectFile[] = [];
     for (const f of files) {
       const path = await realPathFor(f.parentId, f.name);
+      let blobUrl: string | undefined;
+      if (f.isBinary && f.content) {
+        const bytes = Buffer.from(f.content, "base64");
+        const uploaded = await uploadBinaryFile(`${projectId}${path}`, bytes, f.mimeType);
+        blobUrl = uploaded.url;
+      }
       const doc = await ProjectFileModel.create({
         projectId,
         parentId: f.parentId,
@@ -555,6 +576,7 @@ export async function uploadFiles(projectId: string, files: UploadFileInput[]): 
         isBinary: f.isBinary,
         sizeBytes: f.sizeBytes,
         mimeType: f.mimeType,
+        blobUrl,
         content: f.isBinary ? undefined : (f.content ?? ""),
       } as never);
       created.push(toProjectFile(doc));

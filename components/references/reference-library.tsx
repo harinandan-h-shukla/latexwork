@@ -77,9 +77,16 @@ export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: R
       <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterKey)}>
         <TabsList>
           <TabsTrigger value="all">All ({counts.all})</TabsTrigger>
-          <TabsTrigger value="cited">Cited ({counts.cited})</TabsTrigger>
+          <TabsTrigger value="cited" className="data-active:text-success">
+            Cited ({counts.cited})
+          </TabsTrigger>
           <TabsTrigger value="uncited">Uncited ({counts.uncited})</TabsTrigger>
-          <TabsTrigger value="needs-review">Needs review ({counts.needsReview})</TabsTrigger>
+          <TabsTrigger
+            value="needs-review"
+            className={counts.needsReview > 0 ? "text-warning data-active:text-warning" : undefined}
+          >
+            Needs review ({counts.needsReview})
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -145,12 +152,15 @@ export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: R
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   {entry.metadataVerified && (
-                    <Badge variant="secondary" className="gap-1 text-[11px]">
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-success/30 bg-success/10 text-[11px] text-success"
+                    >
                       <BadgeCheckIcon className="size-3" /> Metadata verified
                     </Badge>
                   )}
                   {entry.doiVerified && (
-                    <Badge variant="secondary" className="gap-1 text-[11px]">
+                    <Badge variant="outline" className="gap-1 border-info/30 bg-info/10 text-[11px] text-info">
                       <BadgeCheckIcon className="size-3" /> DOI verified
                     </Badge>
                   )}
@@ -159,7 +169,15 @@ export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: R
                       Duplicate key
                     </Badge>
                   )}
-                  <Badge variant="outline" className="text-[11px]">
+                  <Badge
+                    variant="outline"
+                    className={
+                      "text-[11px] " +
+                      ((entryUsage?.count ?? 0) > 0
+                        ? "border-primary/30 bg-primary/10 text-primary"
+                        : "text-muted-foreground")
+                    }
+                  >
                     Cited {entryUsage?.count ?? 0} time{(entryUsage?.count ?? 0) === 1 ? "" : "s"}
                   </Badge>
                   {entryUsage?.sections.map((s) => (

@@ -22,7 +22,10 @@ export interface CloudBuildStatusResponse {
 
 export interface CloudCompileFileInput {
   path: string;
+  /** utf8 text, or base64-encoded bytes when encoding is "base64" (binary
+   * files — images/figures). */
   content: string;
+  encoding?: "utf8" | "base64";
   id?: string;
 }
 

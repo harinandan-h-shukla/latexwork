@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { LibraryIcon, TableIcon } from "lucide-react";
+import { BookMarkedIcon, LibraryIcon, TableIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BibEditor } from "@/components/references/bib-editor";
@@ -76,7 +76,10 @@ export function ReferencesWorkspace({ projectId }: ReferencesWorkspaceProps) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-medium">Reference library</h2>
+          <h2 className="flex items-center gap-2 text-lg font-medium">
+            <BookMarkedIcon className="size-4.5" style={{ color: "var(--icon-reference)" }} />
+            Reference library
+          </h2>
           <p className="text-sm text-muted-foreground">
             {entries.length} entr{entries.length === 1 ? "y" : "ies"} · {file.name}
           </p>

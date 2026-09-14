@@ -58,7 +58,7 @@ export async function startCloudCompile(request: CloudCompileRequest): Promise<{
       projectId: request.projectId,
       callerId: userId,
       mainFile: request.mainFile,
-      files: request.files.map((f) => ({ path: f.path, content: f.content })),
+      files: request.files.map((f) => ({ path: f.path, content: f.content, encoding: f.encoding })),
       compiler: request.compiler,
       options: { draftMode: request.draftMode, shellEscape: request.shellEscape },
     }),

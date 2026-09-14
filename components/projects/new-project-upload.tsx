@@ -36,7 +36,8 @@ async function readZipEntries(file: File): Promise<ZipImportEntry[]> {
 
     if (isBinary) {
       const bytes = await entry.async("uint8array");
-      entries.push({ path, content: "", isBinary: true, sizeBytes: bytes.length, mimeType });
+      const base64 = await entry.async("base64");
+      entries.push({ path, content: base64, isBinary: true, sizeBytes: bytes.length, mimeType });
     } else {
       const content = await entry.async("string");
       entries.push({ path, content, isBinary: false, sizeBytes: content.length, mimeType });

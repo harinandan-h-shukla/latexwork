@@ -23,6 +23,20 @@ function readAsText(file: File): Promise<string> {
   });
 }
 
+/** Base64, not raw bytes — readAsDataURL gives "data:<mime>;base64,<data>",
+ * the part after the comma is what uploadFiles expects. */
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
+
 export function useFileUploads() {
   const [uploads, setUploads] = useState<UploadEntry[]>([]);
   const counter = useRef(0);
@@ -45,7 +59,7 @@ export function useFileUploads() {
 
       const finish = async () => {
         const isBinary = isLikelyBinaryUpload(file.name, file.type);
-        const content = isBinary ? undefined : await readAsText(file);
+        const content = isBinary ? await readAsBase64(file) : await readAsText(file);
         const input: UploadFileInput = {
           parentId,
           name: file.name,

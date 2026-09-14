@@ -33,6 +33,18 @@ export type LayoutMode = "split" | "editor-only" | "pdf-only";
 
 export type CursorContext = { type: "cite"; key: string } | null;
 
+/** Chunked to avoid call-stack blowups from spreading a huge byte array
+ * into String.fromCharCode (a real risk for multi-MB figures). */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+}
+
 let compileRunId = 0;
 
 interface WorkspaceState {
@@ -261,13 +273,28 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       const mainFile = files.find((f) => f.isMain) ?? files.find((f) => f.type === "file" && f.name.endsWith(".tex"));
       mainFilePath = (mainFile?.path ?? "/main.tex").replace(/^\//, "");
       const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
-      smartFiles = await Promise.all(
-        textFiles.map(async (f) => ({
-          path: f.path.replace(/^\//, ""),
-          content: fileContents[f.id] ?? (await getFileContent(f.id)),
-          id: f.id,
-        }))
-      );
+      // Binary files (images/figures) used to be excluded entirely, which
+      // is why \includegraphics always failed on a real compile — they
+      // have real object-storage URLs now (see lib/storage/blob-storage.ts)
+      // instead of never having their bytes stored anywhere at all.
+      const binaryFiles = files.filter((f) => f.type === "file" && f.isBinary && f.blobUrl);
+      const [textInputs, binaryInputs] = await Promise.all([
+        Promise.all(
+          textFiles.map(async (f) => ({
+            path: f.path.replace(/^\//, ""),
+            content: fileContents[f.id] ?? (await getFileContent(f.id)),
+            id: f.id,
+          }))
+        ),
+        Promise.all(
+          binaryFiles.map(async (f) => {
+            const res = await fetch(f.blobUrl!);
+            const buf = await res.arrayBuffer();
+            return { path: f.path.replace(/^\//, ""), content: arrayBufferToBase64(buf), id: f.id, encoding: "base64" as const };
+          })
+        ),
+      ]);
+      smartFiles = [...textInputs, ...binaryInputs];
     }
 
     const applyIfCurrent = (partial: CompileResult) => {

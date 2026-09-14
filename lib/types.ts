@@ -149,6 +149,9 @@ export interface ProjectFile {
   mimeType?: string;
   thumbnailUrl?: string;
   linkedUrl?: string;
+  /** Public URL for a binary file's actual bytes (object storage) — set
+   * only for isBinary files that have been uploaded for real. */
+  blobUrl?: string;
   createdAt: string;
   updatedAt: string;
   content?: string;
