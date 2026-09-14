@@ -14,6 +14,8 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { CompileStatus } from "@/lib/types";
 import type { CompileOptions } from "@/lib/mock-api/compile";
@@ -91,6 +93,7 @@ export function CompileToolbar() {
   const compiler = useUiStore((s) => s.compileCompiler);
   const draftMode = useUiStore((s) => s.compileDraftMode);
   const autoCompile = useUiStore((s) => s.compileAutoCompile);
+  const setAutoCompile = useUiStore((s) => s.setCompileAutoCompile);
   const shellEscape = useUiStore((s) => s.compileShellEscape);
   const incremental = useUiStore((s) => s.compileIncremental);
   const customCommand = useUiStore((s) => s.compileCustomCommand);
@@ -183,6 +186,18 @@ export function CompileToolbar() {
           <SettingsIcon className="size-3.5" />
           Compiler options
         </Button>
+
+        {/* Previously only reachable via a full trip to Settings, with no
+            indication there that anything auto-compile-related lived
+            there — this is the single most reached-for toggle when a
+            recompile-on-every-pause loop is unwanted mid-edit, so it's
+            inline where Compile itself is. */}
+        <div className="flex items-center gap-1.5 border-l pl-2 text-xs text-muted-foreground">
+          <Switch id="toolbar-auto-compile" checked={autoCompile} onCheckedChange={setAutoCompile} className="scale-90" />
+          <Label htmlFor="toolbar-auto-compile" className="cursor-pointer select-none">
+            Auto-compile
+          </Label>
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
           <StatusStepper status={status} />

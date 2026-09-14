@@ -116,7 +116,7 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
         </div>
       </div>
       {!focusMode && <SidePanelHost projectId={projectId} />}
-      {!focusMode && <SidePanelRail projectId={projectId} />}
+      {!focusMode && <SidePanelRail />}
     </div>
   );
 

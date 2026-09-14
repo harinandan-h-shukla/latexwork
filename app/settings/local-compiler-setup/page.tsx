@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CheckCircle2Icon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { AlertTriangleIcon, CheckCircle2Icon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,8 +65,19 @@ function CopyableCommand({ command }: { command: string }) {
   );
 }
 
+const LOCALHOST_ORIGINS = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
+
 export default function LocalCompilerSetupPage() {
   const [os, setOs] = useState<Os>("linux");
+  // local-agent only accepts connections from a fixed origin allow-list
+  // (defaults to localhost:3000 only) — a real, previously-silent bug:
+  // testing from a deployed domain (not localhost) gets rejected by
+  // local-agent's CORS check with no visible error anywhere in this app,
+  // just "local compiler not detected." Detecting the current origin here
+  // lets the guide hand over the exact env var value needed instead of a
+  // placeholder the user has to figure out is even necessary.
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const needsOriginConfig = currentOrigin !== "" && !LOCALHOST_ORIGINS.has(currentOrigin);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-10 sm:px-6">
@@ -81,6 +92,33 @@ export default function LocalCompilerSetupPage() {
           project&apos;s local-agent service.
         </p>
       </div>
+
+      {needsOriginConfig && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardHeader>
+            {/* Color alone (text-warning on a light tint) sits right at
+                ~3.2:1 contrast in light mode — under WCAG's 4.5:1 for body
+                text. Keeping the heading in the normal foreground color and
+                using warning color only on the icon avoids that, matching
+                the pattern the timeout banner below already uses
+                (text-destructive stays reserved for where the background
+                is solid/high-contrast, not a 5-10% tint). */}
+            <CardTitle className="flex items-center gap-1.5">
+              <AlertTriangleIcon className="size-4 text-warning" />
+              You&apos;re using a deployed site, not localhost
+            </CardTitle>
+            <CardDescription>
+              local-agent only accepts connections from an allow-listed origin (localhost only, by default) — from{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">{currentOrigin}</code>, it will silently
+              refuse the connection unless you tell it to allow this origin. Set this environment variable before
+              starting local-agent in step 2 below:
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CopyableCommand command={`INKWELL_AGENT_ALLOWED_ORIGINS=${currentOrigin}`} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -137,10 +175,13 @@ export default function LocalCompilerSetupPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Requires Node.js 18 or newer. In a terminal, from the project root:</p>
-          <CopyableCommand command={AGENT_COMMAND} />
+          <CopyableCommand
+            command={needsOriginConfig ? `INKWELL_AGENT_ALLOWED_ORIGINS=${currentOrigin} ${AGENT_COMMAND}` : AGENT_COMMAND}
+          />
           <p className="text-sm text-muted-foreground">
-            On startup it prints which compilers it found. Leave this running in the background while you use
-            Inkwell.
+            On startup it prints which compilers it found — and which origins it&apos;s accepting connections
+            from, so you can confirm the value above took effect. Leave this running in the background while you
+            use Inkwell.
           </p>
         </CardContent>
       </Card>

@@ -10,7 +10,6 @@ import {
   DownloadIcon,
   FileTextIcon,
   LayoutListIcon,
-  LinkIcon,
   MaximizeIcon,
   MinimizeIcon,
   MinusIcon,
@@ -24,7 +23,6 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { CompileLogEntry, SyncTexMapping } from "@/lib/types";
 import { useWorkspaceStore } from "@/store/workspace-store";
@@ -100,7 +98,7 @@ export function PdfPreview({ pdfUrl, isCompiling }: PdfPreviewProps) {
   const [scale, setScale] = useState(1.1);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
-  const [continuous, setContinuous] = useState(false);
+  const [continuous, setContinuous] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -597,13 +595,6 @@ export function PdfPreview({ pdfUrl, isCompiling }: PdfPreviewProps) {
         >
           <SearchIcon className="size-3.5" />
         </Button>
-
-        {synctex.length > 0 && (
-          <Badge variant="outline" className="gap-1 text-[10px]" title="Click the PDF to jump to source, or use 'Jump to PDF' on a text selection in the editor.">
-            <LinkIcon className="size-2.5" />
-            SyncTeX linked
-          </Badge>
-        )}
 
         <div className="ml-auto flex items-center gap-0.5">
           <Button variant="ghost" size="icon" className="size-6" onClick={handlePrint} aria-label="Print PDF">

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   SparklesIcon,
   BookMarkedIcon,
@@ -10,18 +9,9 @@ import {
   NotebookPenIcon,
   MessagesSquareIcon,
   TerminalIcon,
-  MoreHorizontalIcon,
-  HistoryIcon,
-  SlidersHorizontalIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore, type SidePanelId } from "@/store/workspace-store";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const RAIL_ITEMS: Array<{ id: SidePanelId; label: string; shortcut?: string; icon: typeof SparklesIcon; color: string }> = [
   { id: "papers", label: "Research", icon: SparklesIcon, color: "var(--icon-research)" },
@@ -40,10 +30,11 @@ const RAIL_ITEMS: Array<{ id: SidePanelId; label: string; shortcut?: string; ico
 /** Right-hand utility rail — a narrow, always-visible column of contextual
  * panels (mirrored on the left by EditorToolsRail). Clicking an icon opens
  * an adjacent panel without navigating away or resizing the manuscript/PDF;
- * see SidePanelHost. "More" is the one exception — a plain dropdown for
- * low-frequency actions (chat, compile log, version history, compiler
- * settings) rather than another persistent panel. */
-export function SidePanelRail({ projectId }: { projectId: string }) {
+ * see SidePanelHost. Used to also have a "More" dropdown (version history,
+ * compiler settings) but both are already reachable elsewhere — the
+ * Versions tab, and the compile toolbar's "Compiler options" link — so it
+ * was just a redundant extra click, not a second path to anything unique. */
+export function SidePanelRail() {
   const activeSidePanel = useWorkspaceStore((s) => s.activeSidePanel);
   const setActiveSidePanel = useWorkspaceStore((s) => s.setActiveSidePanel);
   const cursorContext = useWorkspaceStore((s) => s.cursorContext);
@@ -69,32 +60,6 @@ export function SidePanelRail({ projectId }: { projectId: string }) {
           </button>
         );
       })}
-
-      <div className="mt-auto flex flex-col items-center gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                title="More"
-                className="flex size-10 flex-col items-center justify-center gap-0.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-              />
-            }
-          >
-            <MoreHorizontalIcon className="size-5" />
-            <span className="text-[9px] leading-none">More</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="left" align="end">
-            <DropdownMenuItem render={<Link href={`/projects/${projectId}/history`} />}>
-              <HistoryIcon className="text-violet-500" />
-              Version history
-            </DropdownMenuItem>
-            <DropdownMenuItem render={<Link href="/settings" />}>
-              <SlidersHorizontalIcon className="text-slate-500" />
-              Local compiler settings
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
     </div>
   );
 }
