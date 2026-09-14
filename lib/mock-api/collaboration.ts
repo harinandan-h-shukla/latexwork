@@ -1,3 +1,13 @@
+"use server";
+
+// This file was missing "use server" (unlike files.ts/projects.ts/auth.ts,
+// which all have it) — harmless while every export here only touched the
+// plain in-memory mockDb (fine to bundle into the browser), but the real
+// Mongoose-backed branches added below can only run server-side. Without
+// this directive Next.js bundles the whole module for the client, which is
+// both wrong (Mongoose doesn't run in a browser) and was breaking the build
+// outright (an import from another "use server" file didn't resolve inside
+// a client bundle).
 import type {
   ChatMessage,
   Collaborator,
@@ -13,7 +23,7 @@ import { seedMockDb } from "@/lib/mock-api/seed";
 import { getDb } from "@/lib/db/mongoose";
 import { ProjectModel, CollaboratorModel } from "@/lib/db/models/project";
 import { UserModel } from "@/lib/db/models/user";
-import { toUser } from "@/lib/mock-api/auth";
+import { toUser } from "@/lib/db/user-mapper";
 
 // Same real-vs-legacy-mock id split used throughout lib/mock-api/*.ts (a
 // mock id is never a 24-char hex string, a real Mongo id always is).

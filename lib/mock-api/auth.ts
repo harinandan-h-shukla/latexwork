@@ -10,9 +10,9 @@
 import bcrypt from "bcryptjs";
 import type { User } from "@/lib/types";
 import { getDb } from "@/lib/db/mongoose";
-import { UserModel, type UserDoc } from "@/lib/db/models/user";
+import { UserModel } from "@/lib/db/models/user";
 import { getSession, setSessionUser, clearSession } from "@/lib/session";
-import type { HydratedDocument } from "mongoose";
+import { toUser } from "@/lib/db/user-mapper";
 
 export type OAuthProvider = "google" | "orcid" | "github";
 
@@ -61,39 +61,6 @@ export interface SignUpInput {
 export interface LogInInput {
   email: string;
   password: string;
-}
-
-export function toUser(doc: HydratedDocument<UserDoc>): User {
-  const obj = doc.toObject({ getters: true });
-  return {
-    id: String(obj._id),
-    name: obj.name,
-    email: obj.email,
-    avatarUrl: obj.avatarUrl ?? undefined,
-    createdAt: (obj.createdAt as Date).toISOString(),
-    twoFactorEnabled: obj.twoFactorEnabled,
-    linkedAccounts: (obj.linkedAccounts ?? []).map((a) => ({
-      provider: a.provider,
-      connectedAt: new Date(a.connectedAt).toISOString(),
-      externalId: a.externalId,
-      externalEmail: a.externalEmail ?? undefined,
-    })),
-    editorDefaults: {
-      keybinding: obj.editorDefaults?.keybinding ?? "default",
-      theme: obj.editorDefaults?.theme ?? "default",
-      fontSize: obj.editorDefaults?.fontSize ?? 14,
-      tabSize: obj.editorDefaults?.tabSize ?? 2,
-      autocomplete: obj.editorDefaults?.autocomplete ?? true,
-      wordWrap: obj.editorDefaults?.wordWrap ?? true,
-      lineNumbers: obj.editorDefaults?.lineNumbers ?? true,
-      compilerPreference: obj.editorDefaults?.compilerPreference ?? undefined,
-    },
-    planTier: obj.planTier,
-    storageQuotaBytes: obj.storageQuotaBytes,
-    storageUsedBytes: obj.storageUsedBytes,
-    emailNotificationPrefs: obj.emailNotificationPrefs,
-    privacyPrefs: obj.privacyPrefs,
-  };
 }
 
 export async function getCurrentUser(): Promise<User> {
