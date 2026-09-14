@@ -101,7 +101,16 @@ const TEX_INSTALL: Record<Os, { fast: InstallOption; full: InstallOption }> = {
 };
 
 const TLMGR_COMMAND = "tlmgr install <package-name>";
-const AGENT_COMMAND = "cd local-agent && npm install && npm run build && npm start";
+const CLONE_COMMAND = "git clone https://github.com/harinandan-h-shukla/latexwork.git && cd latexwork/local-agent";
+const BUILD_COMMAND = "npm install && npm run build";
+// The env var must sit directly in front of the ONE command that actually
+// reads it (npm start, i.e. node dist/cli.js) — a real bug in an earlier
+// version of this guide put it in front of `cd` instead: `VAR=x cd dir &&
+// npm start` only applies VAR to `cd`, not to anything later in the chain,
+// so local-agent would silently start with the default (localhost-only)
+// origin allow-list no matter what value was shown here. Confirmed by a
+// real run reproducing exactly that.
+const START_COMMAND_PLAIN = "npm start";
 
 function CopyableCommand({ command }: { command: string }) {
   async function copy() {
@@ -255,16 +264,37 @@ export default function LocalCompilerSetupPage() {
         <CardHeader>
           <CardTitle>2. Start the local compiler agent</CardTitle>
           <CardDescription>
-            A small Node.js service (this project&apos;s own <code className="rounded bg-muted px-1 py-0.5 text-xs">local-agent/</code> folder)
-            that this site talks to on localhost — it never runs arbitrary commands, only the fixed set of LaTeX
-            compilers it detects.
+            A small Node.js service (the <code className="rounded bg-muted px-1 py-0.5 text-xs">local-agent/</code> folder
+            in Inkwell&apos;s own source) that this site talks to on localhost — it never runs arbitrary commands, only
+            the fixed set of LaTeX compilers it detects. Requires Node.js 18 or newer.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Requires Node.js 18 or newer. In a terminal, from the project root:</p>
-          <CopyableCommand
-            command={needsOriginConfig ? `INKWELL_AGENT_ALLOWED_ORIGINS=${currentOrigin} ${AGENT_COMMAND}` : AGENT_COMMAND}
-          />
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-sm text-muted-foreground">
+              If you don&apos;t already have the Inkwell source on this machine, get it first (only needed once):
+            </p>
+            <CopyableCommand command={CLONE_COMMAND} />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm text-muted-foreground">
+              From inside that <code className="rounded bg-muted px-1 py-0.5 text-xs">local-agent</code> folder, install and build (only needed once, or after an update):
+            </p>
+            <CopyableCommand command={BUILD_COMMAND} />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm text-muted-foreground">Then start it — every time you want local compiling available:</p>
+            <CopyableCommand
+              command={
+                needsOriginConfig
+                  ? `INKWELL_AGENT_ALLOWED_ORIGINS=${currentOrigin} ${START_COMMAND_PLAIN}`
+                  : START_COMMAND_PLAIN
+              }
+            />
+          </div>
+
           <p className="text-sm text-muted-foreground">
             On startup it prints which compilers it found — and which origins it&apos;s accepting connections
             from, so you can confirm the value above took effect. Leave this running in the background while you
