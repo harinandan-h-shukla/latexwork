@@ -66,23 +66,28 @@ function referenceCountFor(projectId: string): number {
 /** Images for a real project live in MongoDB (uploaded via the real file
  * tree), never in mockDb.files — this used to only check mockDb.files, so
  * figureCount silently read 0 for every real project regardless of how many
- * images it actually had. */
+ * images it actually had. The thumbnail itself used to read a `thumbnailUrl`
+ * field nothing ever wrote (a real object-storage-backed image was always
+ * "TASKS.md Phase 2.3" future work) — now that lib/storage/blob-storage.ts
+ * actually backs uploaded binary files, the first real image's bytes are
+ * reachable through the authenticated app/api/files/[fileId]/blob route. */
 async function figuresFor(projectId: string): Promise<{ count: number; firstThumbnailUrl: string | null }> {
   if (OBJECT_ID_RE.test(projectId)) {
     const images = await ProjectFileModel.find({
       projectId,
       isBinary: true,
       mimeType: { $regex: "^image/" },
+      blobPathname: { $exists: true, $ne: null },
     })
       .sort({ createdAt: 1 })
-      .select("thumbnailUrl")
+      .select("_id")
       .lean();
-    return { count: images.length, firstThumbnailUrl: images[0]?.thumbnailUrl ?? null };
+    return { count: images.length, firstThumbnailUrl: images[0] ? `/api/files/${images[0]._id}/blob` : null };
   }
   const images = mockDb.files.filter(
     (f) => f.projectId === projectId && f.isBinary && (f.mimeType?.startsWith("image/") ?? false),
   );
-  return { count: images.length, firstThumbnailUrl: images[0]?.thumbnailUrl ?? null };
+  return { count: images.length, firstThumbnailUrl: null };
 }
 
 export async function listProjectDashboardStats(
@@ -96,6 +101,15 @@ export async function listProjectDashboardStats(
   ]);
   const collabMap = new Map(collaboratorCounts.map((c) => [String(c._id), c.count]));
 
+  // A user-chosen cover image (Project.thumbnailBlobPathname) takes priority
+  // over the auto-picked "first figure in the project" fallback below.
+  const customThumbnails = await ProjectModel.find({ _id: { $in: projectIds } })
+    .select("thumbnailBlobPathname")
+    .lean();
+  const customThumbMap = new Map(
+    customThumbnails.filter((p) => p.thumbnailBlobPathname).map((p) => [String(p._id), String(p._id)])
+  );
+
   const result: Record<string, ProjectDashboardStats> = {};
   for (const projectId of projectIds) {
     const figures = await figuresFor(projectId);
@@ -103,7 +117,9 @@ export async function listProjectDashboardStats(
       progressPercent: 0,
       referenceCount: referenceCountFor(projectId),
       figureCount: figures.count,
-      thumbnailUrl: figures.firstThumbnailUrl,
+      thumbnailUrl: customThumbMap.has(projectId)
+        ? `/api/projects/${projectId}/thumbnail`
+        : figures.firstThumbnailUrl,
       collaboratorCount: 1 + (collabMap.get(projectId) ?? 0), // +1 for the owner
     };
   }

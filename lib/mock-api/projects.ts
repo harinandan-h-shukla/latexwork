@@ -11,6 +11,7 @@ import { ProjectModel, CollaboratorModel, type ProjectDoc } from "@/lib/db/model
 import { UserModel } from "@/lib/db/models/user";
 import { requireUserId } from "@/lib/db/require-user";
 import type { HydratedDocument } from "mongoose";
+import { uploadBinaryFile } from "@/lib/storage/blob-storage";
 
 export type ProjectSortField = "name" | "updatedAt" | "createdAt" | "owner";
 export type SortOrder = "asc" | "desc";
@@ -159,6 +160,23 @@ export async function updateProject(
   if (patch.folderId !== undefined) project.folderId = patch.folderId as never;
   await project.save();
   return toProject(project);
+}
+
+/** A user-chosen cover image for the dashboard card, distinct from (and
+ * taking priority over) the auto-picked "first figure in the project"
+ * fallback in lib/mock-api/dashboard.ts. `base64` is the raw image bytes,
+ * base64-encoded (same convention as UploadFileInput/ZipImportEntry). */
+export async function setProjectThumbnail(
+  projectId: string,
+  base64: string,
+  mimeType: string
+): Promise<void> {
+  await getDb();
+  const project = await requireOwnedProject(projectId);
+  const bytes = Buffer.from(base64, "base64");
+  const uploaded = await uploadBinaryFile(`${projectId}/thumbnail`, bytes, mimeType);
+  project.thumbnailBlobPathname = uploaded.pathname;
+  await project.save();
 }
 
 export async function softDeleteProject(projectId: string): Promise<void> {

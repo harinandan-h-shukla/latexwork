@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon, BookOpenIcon, FileTextIcon, ImageIcon, StarIcon, UsersIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  BookOpenIcon,
+  CameraIcon,
+  FileTextIcon,
+  ImageIcon,
+  Loader2Icon,
+  StarIcon,
+  UsersIcon,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import type { Project, User } from "@/lib/types";
 import type { ProjectDashboardStats } from "@/lib/mock-api/dashboard";
 import { getCurrentUser } from "@/lib/mock-api/auth";
+import { setProjectThumbnail } from "@/lib/mock-api/projects";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/collaboration/user-avatar";
 import { useProjectsStore } from "@/store/projects-store";
@@ -22,9 +33,26 @@ interface ProjectCardProps {
   stats?: ProjectDashboardStats;
 }
 
+/** Base64, not raw bytes — same convention as
+ * components/file-tree/use-file-uploads.ts's readAsBase64. */
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ProjectCard({ project, stats }: ProjectCardProps) {
   const toggleStar = useProjectsStore((s) => s.toggleStar);
   const [owner, setOwner] = useState<User | null>(null);
+  const [customThumb, setCustomThumb] = useState<string | null>(null);
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,15 +68,63 @@ export function ProjectCard({ project, stats }: ProjectCardProps) {
     };
   }, []);
 
+  async function handleThumbnailPicked(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose an image file for the thumbnail");
+      return;
+    }
+    setUploadingThumb(true);
+    try {
+      const base64 = await readAsBase64(file);
+      await setProjectThumbnail(project.id, base64, file.type);
+      setCustomThumb(URL.createObjectURL(file));
+      toast.success("Thumbnail updated");
+    } catch {
+      toast.error("Couldn't update thumbnail");
+    } finally {
+      setUploadingThumb(false);
+    }
+  }
+
+  const thumbnailUrl = customThumb ?? stats?.thumbnailUrl;
+
   return (
     <Card className="group/project-card gap-3 overflow-hidden border-border transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
-      <div className="flex h-28 items-center justify-center border-b border-border-strong bg-gradient-to-br from-accent to-muted/60">
-        {stats?.thumbnailUrl ? (
+      <div className="group/thumb relative flex h-28 items-center justify-center border-b border-border-strong bg-gradient-to-br from-accent to-muted/60">
+        {thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- arbitrary user-uploaded content, not a known-dimension local asset
-          <img src={stats.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           <FileTextIcon className="size-9 text-primary/40" />
         )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            void handleThumbnailPicked(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          title="Set custom thumbnail"
+          aria-label="Set custom thumbnail"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingThumb}
+          className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover/thumb:opacity-100 focus-visible:opacity-100"
+        >
+          {uploadingThumb ? (
+            <Loader2Icon className="size-5 animate-spin" />
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs font-medium">
+              <CameraIcon className="size-4" />
+              Change thumbnail
+            </span>
+          )}
+        </button>
       </div>
 
       <CardHeader className="flex-row items-start justify-between gap-2">

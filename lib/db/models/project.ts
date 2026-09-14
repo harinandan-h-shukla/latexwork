@@ -28,6 +28,10 @@ const ProjectSchema = new Schema(
     trashedAt: { type: Date, default: null },
     settings: { type: ProjectSettingsSchema, default: () => ({}) },
     storageUsedBytes: { type: Number, default: 0 },
+    /** A user-chosen cover image, distinct from the auto-picked "first
+     * figure in the project" thumbnail dashboard.ts falls back to when
+     * this isn't set. See lib/storage/blob-storage.ts. */
+    thumbnailBlobPathname: { type: String, default: null },
     visibility: { type: String, enum: ["private", "public"], default: "private" },
     publicReadOnlyLink: { type: String, default: null },
     // Plain string, not an ObjectId ref: templates still live in the Phase 1
