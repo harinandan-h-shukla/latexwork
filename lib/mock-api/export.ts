@@ -1,3 +1,15 @@
+"use server";
+
+// Was missing "use server" despite doing real work (listFiles/getProject
+// hit MongoDB) — every exported function here happened to still work when
+// called from a client component only because listFiles/getProject are
+// themselves server actions (imported RPC stubs, not inlined code), so the
+// missing directive never surfaced as a build break the way the same gap
+// did in collaboration.ts. It still meant everything else in this file
+// (JSZip, the mock PDF renderer) ran in the browser instead of the server.
+// Fixing it now is also what makes it safe to import blob-storage.ts
+// (server-only) below for the zip export's binary files.
+
 import JSZip from "jszip";
 import type { ApiKey, Webhook } from "@/lib/types";
 import { CURRENT_USER_ID, delay, id, mockDb } from "@/lib/mock-api/db";
@@ -5,6 +17,7 @@ import { seedMockDb } from "@/lib/mock-api/seed";
 import { renderMockPdfBytes, type RenderableFile } from "@/lib/mock-api/mock-pdf-renderer";
 import { listFiles } from "@/lib/mock-api/files";
 import { getProject } from "@/lib/mock-api/projects";
+import { getBinaryFileStream } from "@/lib/storage/blob-storage";
 
 function now(): string {
   return new Date().toISOString();
@@ -36,11 +49,60 @@ async function projectTexFiles(projectId: string): Promise<ExportableFile[]> {
     .map((f) => ({ path: f.path, content: f.content ?? "", isMain: f.isMain }));
 }
 
-async function projectAllTextFiles(projectId: string): Promise<ExportableFile[]> {
+async function readStreamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      total += value.length;
+    }
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+interface ExportableZipFile {
+  path: string;
+  isMain: boolean;
+  text?: string;
+  bytes?: Uint8Array;
+}
+
+/** Unlike projectTexFiles/projectAllTextFiles, this actually fetches binary
+ * files' real bytes from blob storage instead of writing them as empty —
+ * the zip download is meant to be a faithful local copy of the project
+ * (see the "local save for privacy" feature), and a project with figures
+ * silently lost every one of them on every download until this existed. */
+async function projectAllFilesForZip(projectId: string): Promise<ExportableZipFile[]> {
   const files = await listFiles(projectId);
-  return files
-    .filter((f) => f.type === "file")
-    .map((f) => ({ path: f.path, content: f.isBinary ? "" : (f.content ?? ""), isMain: f.isMain }));
+  const results: ExportableZipFile[] = [];
+  for (const f of files) {
+    if (f.type !== "file") continue;
+    if (f.isBinary) {
+      if (f.blobPathname) {
+        const blob = await getBinaryFileStream(f.blobPathname);
+        if (blob) {
+          results.push({ path: f.path, isMain: f.isMain, bytes: await readStreamToBytes(blob.stream) });
+          continue;
+        }
+      }
+      // No bytes in storage for this entry (e.g. a binary row from before
+      // blob storage existed) — omit it rather than writing a 0-byte file
+      // that looks like real (but empty) content.
+      continue;
+    }
+    results.push({ path: f.path, isMain: f.isMain, text: f.content ?? "" });
+  }
+  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,11 +153,13 @@ export async function exportProject(
 
   // A real zip archive (via JSZip) — the source was previously a plain-text
   // manifest wearing a ".zip" extension, which no zip client could open.
-  const allFiles = await projectAllTextFiles(projectId);
-  const files = allFiles.length > 0 ? allFiles : [FALLBACK_MAIN_FILE];
+  const allFiles = await projectAllFilesForZip(projectId);
+  const files: ExportableZipFile[] =
+    allFiles.length > 0 ? allFiles : [{ path: FALLBACK_MAIN_FILE.path, isMain: true, text: FALLBACK_MAIN_FILE.content }];
   const zip = new JSZip();
   for (const f of files) {
-    zip.file(f.path.replace(/^\//, ""), f.content);
+    const cleanPath = f.path.replace(/^\//, "");
+    zip.file(cleanPath, f.bytes ?? f.text ?? "");
   }
   const zipBytes = await zip.generateAsync({ type: "uint8array" });
   return { filename: `${slug}.zip`, content: Buffer.from(zipBytes).toString("base64"), encoding: "base64" };
