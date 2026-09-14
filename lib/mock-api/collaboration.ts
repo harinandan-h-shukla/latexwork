@@ -838,6 +838,32 @@ export async function removeCollaborator(projectId: string, userId: string): Pro
 }
 
 export async function transferOwnership(projectId: string, newOwnerId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const project = await ProjectModel.findById(projectId).select("ownerId");
+    if (!project) return;
+    const previousOwnerId = String(project.ownerId);
+    if (previousOwnerId === newOwnerId) return;
+
+    project.ownerId = newOwnerId as never;
+    await project.save();
+
+    // The owner never gets an explicit CollaboratorModel row (see the
+    // model's own comment — implicit access), so becoming owner means
+    // dropping any existing row for them, and the previous owner needs one
+    // added now that their access is no longer implicit.
+    await CollaboratorModel.deleteOne({ projectId, userId: newOwnerId } as never);
+    const existingPrevious = await CollaboratorModel.findOne({ projectId, userId: previousOwnerId } as never);
+    if (existingPrevious) {
+      const doc = existingPrevious as unknown as { role: Role; save: () => Promise<unknown> };
+      doc.role = "editor";
+      await doc.save();
+    } else {
+      await CollaboratorModel.create({ projectId, userId: previousOwnerId, role: "editor" } as never);
+    }
+    return;
+  }
+
   seedMockDb();
   await delay(400);
   const project = mockDb.projects.find((p) => p.id === projectId);
@@ -871,6 +897,30 @@ export async function setProjectVisibility(
   projectId: string,
   visibility: "private" | "public"
 ): Promise<{ publicReadOnlyLink: string | null }> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const project = await ProjectModel.findById(projectId).select("visibility publicReadOnlyLink");
+    if (!project) return { publicReadOnlyLink: null };
+    project.visibility = visibility;
+    if (visibility === "public") {
+      // A path, not a full URL — this server-side code has no reliable way
+      // to know its own deployed domain (dev vs. a real Vercel URL), and a
+      // wrong hardcoded one is worse than a relative link the client
+      // resolves against window.location.origin itself (see share-button.tsx).
+      // NOTE: there is no actual public-view page at this path yet (no
+      // app/r/[token]/ route exists) — this makes the toggle/link state
+      // persist correctly, but visiting the link 404s until that page is
+      // built. Flagged to the project owner rather than silently shipping
+      // a link that looks like a real feature.
+      project.publicReadOnlyLink =
+        project.publicReadOnlyLink ?? `/r/${projectId}-${Math.random().toString(36).slice(2, 8)}`;
+    } else {
+      project.publicReadOnlyLink = null;
+    }
+    await project.save();
+    return { publicReadOnlyLink: project.publicReadOnlyLink };
+  }
+
   seedMockDb();
   await delay(300);
   const project = mockDb.projects.find((p) => p.id === projectId);
@@ -879,7 +929,7 @@ export async function setProjectVisibility(
   project.visibility = visibility;
   if (visibility === "public") {
     project.publicReadOnlyLink =
-      project.publicReadOnlyLink ?? `https://inkwell.app/r/${projectId}-${Math.random().toString(36).slice(2, 8)}`;
+      project.publicReadOnlyLink ?? `/r/${projectId}-${Math.random().toString(36).slice(2, 8)}`;
   } else {
     project.publicReadOnlyLink = null;
   }

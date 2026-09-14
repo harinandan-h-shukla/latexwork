@@ -43,7 +43,8 @@ import {
   transferOwnership,
   updateCollaboratorRole,
 } from "@/lib/mock-api/collaboration";
-import { CURRENT_USER_ID, mockDb } from "@/lib/mock-api/db";
+import { getProject } from "@/lib/mock-api/projects";
+import { getCurrentUser } from "@/lib/mock-api/auth";
 import type { Collaborator, Role, User } from "@/lib/types";
 
 type CollaboratorRow = Collaborator & { user: User };
@@ -72,6 +73,7 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
   const [inviting, setInviting] = useState(false);
   const [visibility, setVisibility] = useState<"private" | "public">("private");
   const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const rows = await listCollaborators(projectId);
@@ -81,15 +83,30 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     (async () => {
-      const project = mockDb.projects.find((p) => p.id === projectId);
+      const [project, user] = await Promise.all([
+        getProject(projectId).catch(() => null),
+        getCurrentUser().catch(() => null),
+      ]);
       setVisibility(project?.visibility ?? "private");
       setPublicLink(project?.publicReadOnlyLink ?? null);
+      setCurrentUserId(user?.id ?? null);
       await refresh();
     })();
   }, [projectId, refresh]);
 
-  const inviteLink = `https://inkwell.app/join/${projectId}`;
-  const isOwner = collaborators.find((c) => c.userId === CURRENT_USER_ID)?.role === "owner";
+  // There's no separate "pending invite" flow — inviteCollaborator() grants
+  // real access the moment the invited email signs up/logs in (see its own
+  // comment in collaboration.ts), so the useful link to share is just the
+  // real project itself, not a /join/ URL that never actually existed as a
+  // route (was previously hardcoded to a domain — inkwell.app — this app
+  // has never been deployed to).
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const inviteLink = `${origin}/projects/${projectId}`;
+  // publicReadOnlyLink is stored as a path (setProjectVisibility never
+  // hardcodes a domain server-side); resolve it against the real origin
+  // here, same reasoning as inviteLink above.
+  const publicLinkUrl = publicLink ? `${origin}${publicLink}` : null;
+  const isOwner = collaborators.find((c) => c.userId === currentUserId)?.role === "owner";
 
   async function handleInvite() {
     if (!email.trim()) {
@@ -194,14 +211,14 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
             </span>
             <Switch checked={visibility === "public"} onCheckedChange={handleVisibilityChange} />
           </label>
-          {visibility === "public" && publicLink && (
+          {visibility === "public" && publicLinkUrl && (
             <div className="mt-2 flex items-center gap-2 rounded-lg border bg-muted/30 p-1.5">
               <Input
                 readOnly
-                value={publicLink}
+                value={publicLinkUrl}
                 className="h-7 flex-1 border-none bg-transparent px-1.5 text-xs shadow-none focus-visible:ring-0"
               />
-              <Button variant="ghost" size="icon-sm" onClick={() => handleCopy(publicLink, "Public link")}>
+              <Button variant="ghost" size="icon-sm" onClick={() => handleCopy(publicLinkUrl, "Public link")}>
                 <CopyIcon className="size-3.5" />
               </Button>
             </div>
@@ -223,7 +240,7 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
                       {c.user.name}
-                      {c.userId === CURRENT_USER_ID ? " (you)" : ""}
+                      {c.userId === currentUserId ? " (you)" : ""}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{c.user.email}</p>
                   </div>
