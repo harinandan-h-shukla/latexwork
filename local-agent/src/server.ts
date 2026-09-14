@@ -116,9 +116,17 @@ export async function createServer(config: AgentConfig): Promise<{ server: http.
       res.status(400).json({ error: "file, line and mainFile are required." });
       return;
     }
-    const cwd = path.join(config.workDir, projectId);
-    const pdfRelPath = `.build/${path.basename(mainFile, path.extname(mainFile))}.pdf`;
-    const result = await synctexForward(cwd, pdfRelPath, file, Number(line));
+    // Must mirror buildManager.ts's compile cwd exactly: the .synctex.gz
+    // file records source paths relative to wherever latexmk actually ran
+    // (the main file's own directory, not the project root — see that
+    // file's comment for why), so a query has to speak the same relative
+    // paths or it simply won't find matches.
+    const projectRoot = path.join(config.workDir, projectId);
+    const mainDir = path.dirname(mainFile);
+    const cwd = mainDir === "." ? projectRoot : path.join(projectRoot, mainDir);
+    const pdfAbsPath = path.join(projectRoot, ".build", `${path.basename(mainFile, path.extname(mainFile))}.pdf`);
+    const sourceRel = mainDir === "." ? file : path.relative(mainDir, file);
+    const result = await synctexForward(cwd, pdfAbsPath, sourceRel, Number(line));
     if (!result) {
       res.status(404).json({ error: "No SyncTeX mapping for that location." });
       return;
@@ -141,14 +149,19 @@ export async function createServer(config: AgentConfig): Promise<{ server: http.
       res.status(400).json({ error: "page, x, y and mainFile are required." });
       return;
     }
-    const cwd = path.join(config.workDir, projectId);
-    const pdfRelPath = `.build/${path.basename(mainFile, path.extname(mainFile))}.pdf`;
-    const result = await synctexInverse(cwd, pdfRelPath, Number(page), Number(x), Number(y));
+    const projectRoot = path.join(config.workDir, projectId);
+    const mainDir = path.dirname(mainFile);
+    const cwd = mainDir === "." ? projectRoot : path.join(projectRoot, mainDir);
+    const pdfAbsPath = path.join(projectRoot, ".build", `${path.basename(mainFile, path.extname(mainFile))}.pdf`);
+    const result = await synctexInverse(cwd, pdfAbsPath, Number(page), Number(x), Number(y));
     if (!result) {
       res.status(404).json({ error: "No SyncTeX mapping for that location." });
       return;
     }
-    res.json(result);
+    // result.file is relative to `cwd` (the main file's own directory) —
+    // reconstitute the project-relative path the client's ProjectFile.path
+    // values actually use before returning it.
+    res.json({ ...result, file: mainDir === "." ? result.file : path.join(mainDir, result.file) });
   });
 
   app.delete("/project/:projectId", (req: Request, res: Response) => {

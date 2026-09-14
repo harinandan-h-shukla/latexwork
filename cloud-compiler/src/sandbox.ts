@@ -35,7 +35,15 @@ export function sandboxCommand(
   config: ServiceConfig,
   workDir: string,
   command: string,
-  args: string[]
+  args: string[],
+  /** Directory the sandboxed process actually starts in — defaults to
+   * `workDir`, but a build whose main file lives in a subdirectory (e.g. a
+   * zip upload with one top-level wrapping folder) needs the process
+   * running from THAT subdirectory so the main file's own bare, relative
+   * \input{}/\usepackage{} calls resolve, while `workDir` (the whole build
+   * dir, not just this subdirectory) still needs to stay the writable bind
+   * mount so latexmk's -outdir (a sibling of the subdirectory) is writable. */
+  cwd: string = workDir
 ): SandboxedCommand {
   const prlimitArgs = [
     `--as=${config.buildMemoryBytes}`,
@@ -54,7 +62,7 @@ export function sandboxCommand(
     "--unshare-pid",
     "--die-with-parent",
     "--new-session",
-    "--chdir", workDir,
+    "--chdir", cwd,
     "--setenv", "HOME", workDir,
     "--",
     command,

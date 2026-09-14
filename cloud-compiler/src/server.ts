@@ -101,8 +101,12 @@ export async function createServer(config: ServiceConfig): Promise<{ app: expres
       res.status(404).json({ error: "No SyncTeX data available for that build." });
       return;
     }
-    const pdfRelPath = path.relative(record.workDir, record.pdfPath);
-    const result = await synctexForward(record.workDir, pdfRelPath, file, line);
+    // Must mirror buildManager.ts's compile cwd exactly — see that file's
+    // comment on the same computation.
+    const mainDir = path.dirname(record.mainFile);
+    const cwd = mainDir === "." ? record.workDir : path.join(record.workDir, mainDir);
+    const sourceRel = mainDir === "." ? file : path.relative(mainDir, file);
+    const result = await synctexForward(cwd, record.pdfPath, sourceRel, line);
     if (!result) {
       res.status(404).json({ error: "No SyncTeX mapping for that location." });
       return;
@@ -126,13 +130,14 @@ export async function createServer(config: ServiceConfig): Promise<{ app: expres
       res.status(404).json({ error: "No SyncTeX data available for that build." });
       return;
     }
-    const pdfRelPath = path.relative(record.workDir, record.pdfPath);
-    const result = await synctexInverse(record.workDir, pdfRelPath, page, x, y);
+    const mainDir = path.dirname(record.mainFile);
+    const cwd = mainDir === "." ? record.workDir : path.join(record.workDir, mainDir);
+    const result = await synctexInverse(cwd, record.pdfPath, page, x, y);
     if (!result) {
       res.status(404).json({ error: "No SyncTeX mapping for that location." });
       return;
     }
-    res.json(result);
+    res.json({ ...result, file: mainDir === "." ? result.file : path.join(mainDir, result.file) });
   });
 
   app.get("/builds/:buildId/output.pdf", (req: Request, res: Response) => {

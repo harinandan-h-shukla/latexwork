@@ -245,13 +245,26 @@ export class BuildManager {
       `-outdir=${record.outDir}`,
     ];
     if (validated.options.shellEscape) args.push("-shell-escape");
-    args.push(validated.mainFile);
+    // Run with cwd set to the main file's own directory (not the project
+    // root) and pass just its basename — a project whose main file lives
+    // in a subdirectory (e.g. a zip upload that had one top-level wrapping
+    // folder, which is common) otherwise fails on every bare, same-directory
+    // \input{}/\usepackage{} the main file makes: TeX's default input search
+    // path is anchored to the current working directory, not to wherever the
+    // file passed on the command line happens to live, so `latexmk
+    // subdir/main.tex` run from the project root can't find `subdir/foo.tex`
+    // even though `\input{foo}` in main.tex clearly means "next to me."
+    // -outdir stays correct across this since record.outDir is absolute.
+    const mainDir = path.dirname(validated.mainFile);
+    const mainBasename = path.basename(validated.mainFile);
+    const cwd = mainDir === "." ? record.workDir : path.join(record.workDir, mainDir);
+    args.push(mainBasename);
 
     record.status = "running";
     record.startedAt = new Date().toISOString();
     this.emit(record);
 
-    const child = spawn(latexmkPath, args, { cwd: record.workDir });
+    const child = spawn(latexmkPath, args, { cwd });
     record.pid = child.pid;
 
     const chunks: string[] = [];

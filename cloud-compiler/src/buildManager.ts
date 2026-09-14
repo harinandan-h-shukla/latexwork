@@ -243,9 +243,17 @@ export class BuildManager {
         `-outdir=${record.outDir}`,
       ];
       if (validated.options.shellEscape) latexmkArgs.push("-shell-escape");
-      latexmkArgs.push(validated.mainFile);
+      // See sandboxCommand's `cwd` param doc — same reasoning as
+      // local-agent's identical fix: run from the main file's own
+      // directory with just its basename, not the project root with a
+      // path that has a directory component, or sibling \input{}s in a
+      // zip-uploaded subfolder fail to resolve.
+      const mainDir = path.dirname(validated.mainFile);
+      const mainBasename = path.basename(validated.mainFile);
+      const cwd = mainDir === "." ? record.workDir : path.join(record.workDir, mainDir);
+      latexmkArgs.push(mainBasename);
 
-      const sandboxed = sandboxCommand(this.config, record.workDir, latexmkPath, latexmkArgs);
+      const sandboxed = sandboxCommand(this.config, record.workDir, latexmkPath, latexmkArgs, cwd);
 
       record.status = "running";
       record.startedAt = new Date().toISOString();

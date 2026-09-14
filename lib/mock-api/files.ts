@@ -209,18 +209,22 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
   const hasExistingMain = await ProjectFileModel.exists({ projectId, isMain: true });
   if (!hasExistingMain) {
     const texFiles = created.filter((f) => f.type === "file" && f.name.toLowerCase().endsWith(".tex"));
-    const rootTexFiles = texFiles.filter((f) => f.parentId === null);
-    const candidates = rootTexFiles.length > 0 ? rootTexFiles : texFiles;
-    // A real multi-file kit (e.g. a conference author kit with both the
-    // paper and a separate rebuttal/supplementary .tex at the root, neither
-    // named "main.tex") used to fall back to whichever .tex the zip
-    // happened to list first — zip entry order isn't something any zip
-    // tool guarantees to be meaningful, so this could silently mark a
-    // rebuttal template as the main file instead of the actual paper.
-    // Content size is a far more reliable signal: the real paper is
-    // reliably the largest .tex file among the candidates.
+    // The only reliable signal for "this is a real compilable root
+    // document" (as opposed to a section/header/macro file meant to be
+    // \input{}-ed): it actually contains \documentclass. A byte-size
+    // heuristic (an earlier attempt at this) still gets it wrong for real
+    // kits — e.g. a CVPR/WACV-style kit with a short `_main.tex` entry
+    // point and a longer `cvpr_header.tex`/`wacv_header.tex` preamble file
+    // it \input{}s: the header is bigger by byte count but has no
+    // \documentclass and can't be compiled standalone at all.
+    const compilable = texFiles.filter((f) => f.content?.includes("\\documentclass"));
+    const candidates = compilable.length > 0 ? compilable : texFiles;
+    // A real kit can have more than one compilable root (e.g. a CVPR-style
+    // kit's separate main/_rebuttal/_supplementary.tex, all with their own
+    // \documentclass) — prefer whichever one's name actually says "main".
     const main =
       candidates.find((f) => f.name.toLowerCase() === "main.tex") ??
+      candidates.find((f) => f.name.toLowerCase().includes("main")) ??
       candidates.reduce<HydratedDocument<ProjectFileDoc> | undefined>(
         (largest, f) => ((f.sizeBytes ?? 0) > (largest?.sizeBytes ?? 0) ? f : largest),
         candidates[0]
