@@ -10,6 +10,21 @@ import type {
 } from "@/lib/types";
 import { CURRENT_USER_ID, delay, id, mockDb } from "@/lib/mock-api/db";
 import { seedMockDb } from "@/lib/mock-api/seed";
+import { getDb } from "@/lib/db/mongoose";
+import { ProjectModel, CollaboratorModel } from "@/lib/db/models/project";
+import { UserModel } from "@/lib/db/models/user";
+import { toUser } from "@/lib/mock-api/auth";
+
+// Same real-vs-legacy-mock id split used throughout lib/mock-api/*.ts (a
+// mock id is never a 24-char hex string, a real Mongo id always is).
+const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
+function isRealId(value: string): boolean {
+  return OBJECT_ID_RE.test(value);
+}
+
+/** Total people who can work on one project, owner included — the cap the
+ * user asked for ("max 10 person can work"). */
+const MAX_COLLABORATORS_PER_PROJECT = 10;
 
 // Seeding (comments/track-changes/chat/presence) is reserved for this one
 // demo project. It used to run for ANY project id passed in — meaning
@@ -406,6 +421,41 @@ export async function sendChatMessage(
 export async function listCollaborators(
   projectId: string
 ): Promise<Array<Collaborator & { user: User }>> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const project = await ProjectModel.findById(projectId).select("ownerId createdAt");
+    if (!project) return [];
+    const rows = await CollaboratorModel.find({ projectId });
+    const userIds = [...new Set([String(project.ownerId), ...rows.map((r) => String(r.userId))])];
+    const users = await UserModel.find({ _id: { $in: userIds } });
+    const userById = new Map(users.map((u) => [String(u._id), toUser(u)]));
+
+    const joined: Array<Collaborator & { user: User }> = [];
+    const ownerUser = userById.get(String(project.ownerId));
+    if (ownerUser) {
+      joined.push({
+        userId: ownerUser.id,
+        projectId,
+        role: "owner",
+        addedAt: (project.createdAt as Date).toISOString(),
+        user: ownerUser,
+      });
+    }
+    for (const r of rows) {
+      const u = userById.get(String(r.userId));
+      if (!u) continue;
+      joined.push({
+        userId: u.id,
+        projectId,
+        role: r.role as Role,
+        invitedEmail: r.invitedEmail ?? undefined,
+        addedAt: (r.addedAt as Date).toISOString(),
+        user: u,
+      });
+    }
+    return joined;
+  }
+
   seedMockDb();
   await delay(300);
   const project = mockDb.projects.find((p) => p.id === projectId);
@@ -433,6 +483,66 @@ export async function inviteCollaborator(
   email: string,
   role: Role
 ): Promise<Collaborator> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const project = await ProjectModel.findById(projectId).select("ownerId");
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+
+    let user = await UserModel.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Not a registered account yet — create a placeholder the same way
+      // the mock path always has: they gain real access the moment they
+      // sign up/log in with this email, no separate "pending invite" table.
+      user = await UserModel.create({
+        name: email.split("@")[0].replace(/[._-]/g, " ") || email,
+        email,
+      });
+    }
+    if (String(project.ownerId) === String(user._id)) {
+      throw new Error("This person already owns the project.");
+    }
+
+    // CollaboratorModel's `addedAt` timestamp alias confuses Mongoose's
+    // generated filter/create overloads (same friction already worked
+    // around with `as never` elsewhere in lib/mock-api/projects.ts) —
+    // the runtime shape is correct, only the overload resolution isn't.
+    const existing = await CollaboratorModel.findOne({ projectId, userId: user._id } as never);
+    if (existing) {
+      const existingDoc = existing as unknown as { role: Role; addedAt: Date; save: () => Promise<unknown> };
+      existingDoc.role = role;
+      await existingDoc.save();
+      return {
+        userId: String(user._id),
+        projectId,
+        role,
+        invitedEmail: email,
+        addedAt: existingDoc.addedAt.toISOString(),
+      };
+    }
+
+    const collaboratorCount = await CollaboratorModel.countDocuments({ projectId });
+    // +1 for the owner, +1 for the person being invited right now.
+    if (collaboratorCount + 2 > MAX_COLLABORATORS_PER_PROJECT) {
+      throw new Error(
+        `This project already has ${MAX_COLLABORATORS_PER_PROJECT} people (the maximum) — remove someone before inviting another.`
+      );
+    }
+
+    const created = (await CollaboratorModel.create({
+      projectId,
+      userId: user._id,
+      role,
+      invitedEmail: email,
+    } as never)) as unknown as { addedAt: Date };
+    return {
+      userId: String(user._id),
+      projectId,
+      role,
+      invitedEmail: email,
+      addedAt: created.addedAt.toISOString(),
+    };
+  }
+
   seedMockDb();
   await delay(400);
 
@@ -485,6 +595,11 @@ export async function updateCollaboratorRole(
   userId: string,
   role: Role
 ): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await CollaboratorModel.updateOne({ projectId, userId }, { role });
+    return;
+  }
   await delay(250);
   const collaborator = mockDb.collaborators.find(
     (c) => c.projectId === projectId && c.userId === userId
@@ -493,6 +608,11 @@ export async function updateCollaboratorRole(
 }
 
 export async function removeCollaborator(projectId: string, userId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await CollaboratorModel.deleteOne({ projectId, userId });
+    return;
+  }
   await delay(250);
   mockDb.collaborators = mockDb.collaborators.filter(
     (c) => !(c.projectId === projectId && c.userId === userId)

@@ -76,18 +76,33 @@ export function NewProjectUpload({ onCreated }: NewProjectUploadProps) {
     if (!file || !name.trim()) return;
     setProgress(0);
     setUploading(true);
+
+    // Two genuinely different failure modes were collapsed into one
+    // generic "not a valid archive" message before — misleading whenever
+    // the zip parsed fine but project creation or the file import itself
+    // failed (e.g. a real backend error), which has nothing to do with
+    // the archive being invalid.
+    let entries: ZipImportEntry[];
     try {
-      const entries = await readZipEntries(file);
-      if (entries.length === 0) {
-        toast.error("That zip file doesn't contain any extractable files.");
-        return;
-      }
+      entries = await readZipEntries(file);
+    } catch {
+      toast.error("Couldn't read that zip file — is it a valid archive?");
+      setUploading(false);
+      return;
+    }
+    if (entries.length === 0) {
+      toast.error("That zip file doesn't contain any extractable files.");
+      setUploading(false);
+      return;
+    }
+
+    try {
       const project = await createProject({ name, method: "zip" });
       await importZipTree(project.id, entries);
       setProgress(100);
       onCreated(project.id);
-    } catch {
-      toast.error("Couldn't read that zip file — is it a valid archive?");
+    } catch (err) {
+      toast.error(`Couldn't create the project: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setUploading(false);
     }

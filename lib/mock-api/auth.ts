@@ -63,7 +63,7 @@ export interface LogInInput {
   password: string;
 }
 
-function toUser(doc: HydratedDocument<UserDoc>): User {
+export function toUser(doc: HydratedDocument<UserDoc>): User {
   const obj = doc.toObject({ getters: true });
   return {
     id: String(obj._id),

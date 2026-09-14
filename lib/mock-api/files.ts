@@ -209,10 +209,22 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
   const hasExistingMain = await ProjectFileModel.exists({ projectId, isMain: true });
   if (!hasExistingMain) {
     const texFiles = created.filter((f) => f.type === "file" && f.name.toLowerCase().endsWith(".tex"));
+    const rootTexFiles = texFiles.filter((f) => f.parentId === null);
+    const candidates = rootTexFiles.length > 0 ? rootTexFiles : texFiles;
+    // A real multi-file kit (e.g. a conference author kit with both the
+    // paper and a separate rebuttal/supplementary .tex at the root, neither
+    // named "main.tex") used to fall back to whichever .tex the zip
+    // happened to list first — zip entry order isn't something any zip
+    // tool guarantees to be meaningful, so this could silently mark a
+    // rebuttal template as the main file instead of the actual paper.
+    // Content size is a far more reliable signal: the real paper is
+    // reliably the largest .tex file among the candidates.
     const main =
-      texFiles.find((f) => f.name.toLowerCase() === "main.tex") ??
-      texFiles.find((f) => f.parentId === null) ??
-      texFiles[0];
+      candidates.find((f) => f.name.toLowerCase() === "main.tex") ??
+      candidates.reduce<HydratedDocument<ProjectFileDoc> | undefined>(
+        (largest, f) => ((f.sizeBytes ?? 0) > (largest?.sizeBytes ?? 0) ? f : largest),
+        candidates[0]
+      );
     if (main) {
       main.isMain = true;
       await main.save();
