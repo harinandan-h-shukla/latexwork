@@ -102,7 +102,22 @@ const ProjectFileSchema = new Schema(
     content: {
       type: String,
       set: (v?: string) => (v == null ? v : encryptFileContent(v)),
-      get: (v?: string) => (v == null ? v : decryptFileContent(v)),
+      // Bulk/listing reads (reference scanning, citation usage, dashboard
+      // stats) go through this getter on every file in a project and must
+      // keep degrading gracefully for one corrupted row instead of taking
+      // the whole page down — same as they already tolerate a genuinely
+      // empty file. The one call site that actually needs to tell "empty"
+      // and "corrupted" apart — getFileContent, used for editing/compiling/
+      // saving — bypasses this getter (a .lean() query) and calls
+      // decryptFileContent directly so it can throw. See files.ts.
+      get: (v?: string) => {
+        if (v == null) return v;
+        try {
+          return decryptFileContent(v);
+        } catch {
+          return "";
+        }
+      },
     },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } },

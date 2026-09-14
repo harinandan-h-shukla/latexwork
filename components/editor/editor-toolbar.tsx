@@ -179,7 +179,15 @@ export function EditorToolbar({ tools }: { tools: EditorToolsState }) {
 
     for (const file of state.files) {
       if (file.id === state.activeFileId || file.type !== "file" || file.isBinary) continue;
-      const content = state.fileContents[file.id] ?? (await getFileContent(file.id));
+      let content: string;
+      try {
+        content = state.fileContents[file.id] ?? (await getFileContent(file.id));
+      } catch {
+        // A file whose content can't be decrypted just isn't searchable —
+        // skip it rather than aborting the label search for every other
+        // file after it.
+        continue;
+      }
       const label = findLabels(content).find((l) => l.name === target.name);
       if (label) {
         toast.info(`\\label{${target.name}} found in ${file.name} — opening…`);

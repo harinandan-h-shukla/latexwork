@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { Compiler, CompileResult, ProjectFile } from "@/lib/types";
 import type { CodeEditorHandle } from "@/components/editor/code-editor";
 import {
@@ -170,8 +171,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       set({ openFileIds: [...openFileIds, fileId] });
     }
     if (fileContents[fileId] === undefined) {
-      const content = await getFileContent(fileId);
-      set((state) => ({ fileContents: { ...state.fileContents, [fileId]: content } }));
+      try {
+        const content = await getFileContent(fileId);
+        set((state) => ({ fileContents: { ...state.fileContents, [fileId]: content } }));
+      } catch (err) {
+        // Leave fileContents[fileId] unset rather than showing a
+        // deceptively blank editor for a file that actually has real
+        // (but currently unreadable) content — see getFileContent's
+        // decrypt-failure handling.
+        toast.error(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't load this file's content."
+        );
+        set({ activeFileId: fileId });
+        return;
+      }
     }
     set({ activeFileId: fileId });
   },
@@ -283,7 +298,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
 
     let smartFiles: LocalCompileFileInput[] = [];
     let mainFilePath = "main.tex";
-    {
+
+    const applyIfCurrent = (partial: CompileResult) => {
+      if (myRunId !== compileRunId) return;
+      set({ compile: partial });
+    };
+
+    try {
       // Built for both local AND cloud compiles now — the mock cloud
       // renderer used to reach into a shared client-side store directly for
       // this, which broke once real project files moved to MongoDB (that
@@ -301,6 +322,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       // blob store is private, so a raw blobPathname isn't fetchable on
       // its own anyway.
       const binaryFiles = files.filter((f) => f.type === "file" && f.isBinary && f.blobPathname);
+      // This gathering step now lives inside the try/catch below: a
+      // getFileContent() call here throws for a file whose stored content
+      // can't be decrypted (see files.ts), and that must produce a visible
+      // compile error instead of an uncaught rejection that leaves
+      // isCompiling stuck true forever with the local-agent request never
+      // even sent — which is also what protects a project's on-disk build
+      // cache from being overwritten with empty content for an unreadable
+      // file.
       const [textInputs, binaryInputs] = await Promise.all([
         Promise.all(
           textFiles.map(async (f) => ({
@@ -318,14 +347,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         ),
       ]);
       smartFiles = [...textInputs, ...binaryInputs];
-    }
 
-    const applyIfCurrent = (partial: CompileResult) => {
-      if (myRunId !== compileRunId) return;
-      set({ compile: partial });
-    };
-
-    try {
       const result = await compileSmart(
         {
           projectId,

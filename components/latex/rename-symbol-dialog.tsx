@@ -48,10 +48,23 @@ export function RenameSymbolDialog({
     setIsBusy(true);
     const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
     const entries: PreviewEntry[] = [];
+    const unreadable: string[] = [];
     for (const file of textFiles) {
-      const content = fileContents[file.id] ?? (await getFileContent(file.id));
+      let content: string;
+      try {
+        content = fileContents[file.id] ?? (await getFileContent(file.id));
+      } catch {
+        // A file whose content can't be decrypted can't be scanned or
+        // safely rewritten — skip it (rather than aborting the whole scan)
+        // and tell the user, instead of silently omitting it.
+        unreadable.push(file.name);
+        continue;
+      }
       const count = countSymbolOccurrences(content, oldName.trim());
       if (count > 0) entries.push({ fileId: file.id, path: file.path, content, count });
+    }
+    if (unreadable.length > 0) {
+      toast.error(`Couldn't read ${unreadable.length === 1 ? unreadable[0] : `${unreadable.length} files`} — skipped.`);
     }
     setPreview(entries);
     setIsBusy(false);

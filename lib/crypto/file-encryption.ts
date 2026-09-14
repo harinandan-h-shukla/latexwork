@@ -44,10 +44,31 @@ export function encryptFileContent(plaintext: string): string {
   return `${VERSION_PREFIX}:${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString("hex")}`;
 }
 
+/** Thrown by decryptFileContent when a `v1:`-prefixed value can't be
+ * authenticated with the current key — a wrong/rotated key or a corrupted
+ * row. Distinct from a legitimately-empty/unencrypted value, which
+ * decryptFileContent returns normally. */
+export class FileDecryptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileDecryptionError";
+  }
+}
+
 /** Decrypts content produced by encryptFileContent. Passes through
  * unrecognized (non-`v1:`-prefixed) values unchanged rather than throwing —
  * covers empty strings and any content written before encryption existed,
- * instead of corrupting or crashing on it. */
+ * instead of corrupting or crashing on it. Throws FileDecryptionError (does
+ * NOT swallow to "") when a `v1:`-prefixed value fails GCM authentication —
+ * silently returning "" here previously made a corrupted-or-wrong-key row
+ * indistinguishable from a genuinely empty file to every caller, including
+ * the compile file-gatherer and the save path, so a bad row could get
+ * silently compiled as blank and then permanently overwrite any
+ * still-recoverable on-disk copy. Real incident: three projects' files
+ * were re-encrypted with a stale key during an earlier recovery pass and
+ * came back "empty" everywhere, with no error anywhere, until this was
+ * traced by hand. See lib/db/models/project.ts's schema getter for how
+ * bulk/listing reads still degrade gracefully instead of throwing. */
 export function decryptFileContent(stored: string): string {
   if (!stored.startsWith(`${VERSION_PREFIX}:`)) return stored;
   const parts = stored.split(":");
@@ -59,8 +80,8 @@ export function decryptFileContent(stored: string): string {
     const decrypted = Buffer.concat([decipher.update(Buffer.from(cipherHex, "hex")), decipher.final()]);
     return decrypted.toString("utf8");
   } catch {
-    // Wrong/rotated key, or corrupted row — surface as empty rather than
-    // throwing and taking down the whole page for one bad file.
-    return "";
+    throw new FileDecryptionError(
+      "File content could not be decrypted — the stored row is corrupted or was encrypted with a different key."
+    );
   }
 }

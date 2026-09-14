@@ -59,17 +59,30 @@ export function ProjectFindReplaceDialog({
     // sequential await per file — on a multi-chapter project with dozens of
     // files not currently open in tabs, the sequential version turned a
     // single search into several seconds of serialized mock-API round trips.
-    const contents = await Promise.all(
-      textFiles.map((file) => fileContents[file.id] ?? getFileContent(file.id))
+    // Settled, not a bare Promise.all: getFileContent() now throws for a
+    // file whose stored content can't be decrypted (see files.ts), and one
+    // unreadable file must not silently kill search across the whole rest
+    // of the project — it's excluded from results and flagged instead.
+    const settled = await Promise.allSettled(
+      textFiles.map((file) => Promise.resolve(fileContents[file.id] ?? getFileContent(file.id)))
     );
+    const unreadable: string[] = [];
     const nextGroups: FileMatchGroup[] = [];
     textFiles.forEach((file, i) => {
-      const content = contents[i];
+      const outcome = settled[i];
+      if (outcome.status === "rejected") {
+        unreadable.push(file.name);
+        return;
+      }
+      const content = outcome.value;
       const matches = findMatchesInContent(content, searchRegex);
       if (matches.length > 0) {
         nextGroups.push({ file, content, matches });
       }
     });
+    if (unreadable.length > 0) {
+      toast.error(`Couldn't read ${unreadable.length === 1 ? unreadable[0] : `${unreadable.length} files`} — skipped in this search.`);
+    }
     setGroups(nextGroups);
     setSearched(true);
     setIsSearching(false);

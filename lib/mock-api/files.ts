@@ -15,6 +15,7 @@ import { delay, id, mockDb } from "@/lib/mock-api/db";
 import { getDb } from "@/lib/db/mongoose";
 import { ProjectFileModel, ProjectModel, type ProjectFileDoc } from "@/lib/db/models/project";
 import { uploadBinaryFile } from "@/lib/storage/blob-storage";
+import { decryptFileContent } from "@/lib/crypto/file-encryption";
 import type { HydratedDocument } from "mongoose";
 
 const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
@@ -290,8 +291,16 @@ export async function getFile(fileId: string): Promise<ProjectFile> {
 export async function getFileContent(fileId: string): Promise<string> {
   if (isRealId(fileId)) {
     await getDb();
-    const doc = await ProjectFileModel.findById(fileId).select("content");
-    return doc?.content ?? "";
+    // .lean() deliberately skips the schema's content getter (which
+    // swallows a decrypt failure into "" so bulk/listing reads degrade
+    // gracefully — see the model). This is the one read path that feeds
+    // the editor, the compiler, and find/replace's save-back, so a
+    // corrupted-or-wrong-key row must surface as a real, visible error
+    // here instead of silently looking like "this file is empty" and
+    // letting something downstream persist that "" as if it were real.
+    const doc = await ProjectFileModel.findById(fileId).select("content").lean();
+    if (!doc || doc.content == null) return "";
+    return decryptFileContent(doc.content);
   }
   await delay(150);
   const file = mockDb.files.find((f) => f.id === fileId);

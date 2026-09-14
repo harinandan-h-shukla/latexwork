@@ -153,9 +153,14 @@ export function ManuscriptNav() {
     if (!mainFile) return;
     if (fileContents[mainFile.id] != null || extraContents[mainFile.id] != null) return;
     let cancelled = false;
-    getFileContent(mainFile.id).then((c) => {
-      if (!cancelled) setExtraContents((prev) => ({ ...prev, [mainFile.id]: c }));
-    });
+    // Read-only outline display — a decrypt failure here (see
+    // getFileContent) just means no outline for this file, not a data-loss
+    // risk, so it's fine to swallow and leave extraContents unset.
+    getFileContent(mainFile.id)
+      .then((c) => {
+        if (!cancelled) setExtraContents((prev) => ({ ...prev, [mainFile.id]: c }));
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -183,14 +188,20 @@ export function ManuscriptNav() {
     const missing = inputTargets.filter((f) => fileContents[f.id] == null && extraContents[f.id] == null);
     if (missing.length === 0) return;
     let cancelled = false;
-    Promise.all(missing.map((f) => getFileContent(f.id).then((c) => [f.id, c] as const))).then((pairs) => {
-      if (cancelled) return;
-      setExtraContents((prev) => {
-        const next = { ...prev };
-        for (const [id, c] of pairs) next[id] = c;
-        return next;
-      });
-    });
+    // allSettled: one \input{}-ed file failing to decrypt shouldn't blank
+    // out the whole outline for every other input target.
+    Promise.allSettled(missing.map((f) => getFileContent(f.id).then((c) => [f.id, c] as const))).then(
+      (results) => {
+        if (cancelled) return;
+        setExtraContents((prev) => {
+          const next = { ...prev };
+          for (const r of results) {
+            if (r.status === "fulfilled") next[r.value[0]] = r.value[1];
+          }
+          return next;
+        });
+      }
+    );
     return () => {
       cancelled = true;
     };
