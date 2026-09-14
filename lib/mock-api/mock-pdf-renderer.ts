@@ -82,7 +82,19 @@ function stripLatex(source: string): Block[] {
       blocks.push({ kind: "h2", text: subsectionMatch[1].trim() });
       continue;
     }
-    const cleaned = rawLine.replace(/\\[a-zA-Z]+\*?(\[[^\]]*\])?(\{[^}]*\})?/g, "").trim();
+    // Was `(\[...\])?(\{...\})?` — exactly one optional bracket then exactly
+    // one optional brace group. Real commands routinely take more than one
+    // of either, in either order (\newtheorem{name}{Display}[counter],
+    // \newtheorem{name}[counter]{Display}, \author[affil]{name}, ...) — the
+    // old regex only consumed the command name plus the first matching
+    // group, leaving every argument after that as literal orphaned text in
+    // the output (confirmed against a real document: \newtheorem{theorem}
+    // {Theorem}[section] rendered as the literal text "{Theorem}[section]").
+    // Consuming any number of trailing [...]/{...} groups, in any order,
+    // fixes this generally instead of special-casing \newtheorem.
+    const cleaned = rawLine
+      .replace(/\\[a-zA-Z]+\*?(?:\s*(?:\[[^\]]*\]|\{[^}]*\}))*/g, "")
+      .trim();
     if (cleaned) blocks.push({ kind: "body", text: cleaned });
   }
   return blocks;
