@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { UserAvatar } from "@/components/collaboration/user-avatar";
 import { listPresence } from "@/lib/mock-api/collaboration";
-import { mockDb } from "@/lib/mock-api/db";
+import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { PresenceInfo } from "@/lib/types";
 
 export function PresenceStrip({ projectId }: { projectId: string }) {
   const [presence, setPresence] = useState<PresenceInfo[]>([]);
   const files = useWorkspaceStore((s) => s.files);
+  const { byId } = useProjectUsers(projectId);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,7 @@ export function PresenceStrip({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b bg-muted/30 px-3 py-2">
       {presence.map((p) => {
-        const user = mockDb.users.find((u) => u.id === p.userId);
+        const user = byId[p.userId];
         if (!user) return null;
         const file = files.find((f) => f.id === p.fileId);
         return (

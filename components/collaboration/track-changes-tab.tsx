@@ -25,8 +25,8 @@ import {
   rejectAllChanges,
   rejectChange,
 } from "@/lib/mock-api/collaboration";
-import { mockDb } from "@/lib/mock-api/db";
-import type { TrackedChange, User } from "@/lib/types";
+import { useProjectUsers } from "@/components/collaboration/use-project-users";
+import type { TrackedChange } from "@/lib/types";
 
 export function TrackChangesTab({ projectId }: { projectId: string }) {
   const [changes, setChanges] = useState<TrackedChange[]>([]);
@@ -34,6 +34,7 @@ export function TrackChangesTab({ projectId }: { projectId: string }) {
   const [userFilter, setUserFilter] = useState<string>("all");
   const [reviewMode, setReviewMode] = useState(true);
   const [busy, setBusy] = useState(false);
+  const { byId } = useProjectUsers(projectId);
 
   const refresh = useCallback(async () => {
     const list = await listTrackedChanges(projectId);
@@ -49,10 +50,8 @@ export function TrackChangesTab({ projectId }: { projectId: string }) {
 
   const authors = useMemo(() => {
     const ids = Array.from(new Set(changes.map((c) => c.authorId)));
-    return ids
-      .map((authorId) => mockDb.users.find((u) => u.id === authorId))
-      .filter((u): u is User => Boolean(u));
-  }, [changes]);
+    return ids.map((authorId) => byId[authorId]).filter((u) => u !== undefined);
+  }, [changes, byId]);
 
   const visible = userFilter === "all" ? changes : changes.filter((c) => c.authorId === userFilter);
   const pendingVisible = visible.filter((c) => c.status === "pending");
@@ -154,7 +153,7 @@ export function TrackChangesTab({ projectId }: { projectId: string }) {
       ) : (
         <ul className="flex flex-1 flex-col gap-2 overflow-auto p-3">
           {visible.map((c) => {
-            const author = mockDb.users.find((u) => u.id === c.authorId);
+            const author = byId[c.authorId];
             return (
               <li key={c.id} className="rounded-lg border p-2.5 text-sm">
                 <div className="flex flex-wrap items-center gap-1.5">

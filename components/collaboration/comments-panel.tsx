@@ -13,7 +13,7 @@ import { MentionTextarea } from "@/components/collaboration/mention-textarea";
 import { TrackChangesTab } from "@/components/collaboration/track-changes-tab";
 import { extractMentionIds } from "@/components/collaboration/collab-utils";
 import { createComment, listComments } from "@/lib/mock-api/collaboration";
-import { mockDb } from "@/lib/mock-api/db";
+import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { Comment } from "@/lib/types";
 
@@ -22,6 +22,7 @@ export function CommentsPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  const { users } = useProjectUsers(projectId);
 
   const activeFileId = useWorkspaceStore((s) => s.activeFileId);
   const files = useWorkspaceStore((s) => s.files);
@@ -55,7 +56,7 @@ export function CommentsPanel({ projectId }: { projectId: string }) {
       const anchorTo = hasSelection ? selection!.to : 0;
       const quotedText = hasSelection ? view!.state.sliceDoc(selection!.from, selection!.to).slice(0, 200) : "";
 
-      const mentions = extractMentionIds(draft, mockDb.users);
+      const mentions = extractMentionIds(draft, users);
       await createComment(projectId, activeFileId, {
         anchorFrom,
         anchorTo,
@@ -87,7 +88,7 @@ export function CommentsPanel({ projectId }: { projectId: string }) {
             <MentionTextarea
               value={draft}
               onChange={setDraft}
-              users={mockDb.users}
+              users={users}
               placeholder={activeFile ? `Comment on ${activeFile.name}… use @ to mention` : "Open a file to comment"}
               rows={2}
             />

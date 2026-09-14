@@ -5,7 +5,11 @@ import { colorForUser, initials } from "@/components/collaboration/collab-utils"
 import type { User } from "@/lib/types";
 
 interface UserAvatarProps {
-  user: User;
+  // Only these three fields are actually used — loosened from the full User
+  // so callers can pass a minimal placeholder for an author that couldn't
+  // be resolved (e.g. no longer a collaborator) without fabricating a fake
+  // full User object (email, planTier, etc.) just to satisfy the type.
+  user: Pick<User, "id" | "name" | "avatarUrl">;
   size?: "sm" | "default" | "lg";
   ring?: boolean;
 }

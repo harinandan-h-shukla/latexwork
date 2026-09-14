@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/collaboration/user-avatar";
 import { MentionTextarea } from "@/components/collaboration/mention-textarea";
 import { extractMentionIds, formatRelativeTime } from "@/components/collaboration/collab-utils";
 import { replyToComment, resolveComment, reopenComment } from "@/lib/mock-api/collaboration";
-import { mockDb } from "@/lib/mock-api/db";
+import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import type { Comment } from "@/lib/types";
 
 interface CommentThreadProps {
@@ -21,8 +21,8 @@ export function CommentThread({ comment, onChanged }: CommentThreadProps) {
   const [replying, setReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [busy, setBusy] = useState(false);
-  const author = mockDb.users.find((u) => u.id === comment.authorId);
-  const users = mockDb.users;
+  const { users, byId } = useProjectUsers(comment.projectId);
+  const author = byId[comment.authorId];
 
   async function handleReply() {
     if (!replyText.trim()) return;
@@ -57,15 +57,19 @@ export function CommentThread({ comment, onChanged }: CommentThreadProps) {
     }
   }
 
-  if (!author) return null;
+  // Falls back to a placeholder rather than hiding the comment entirely —
+  // author resolution depends on the project's current collaborator list
+  // (useProjectUsers), so someone who commented and was later removed from
+  // the project would otherwise make their own past comment vanish.
+  const displayAuthor = author ?? { id: comment.authorId, name: "Unknown" };
 
   return (
     <div className={cn("rounded-lg border p-2.5", comment.resolved && "bg-muted/20 opacity-70")}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <UserAvatar user={author} size="sm" />
+          <UserAvatar user={displayAuthor} size="sm" />
           <div>
-            <p className="text-sm leading-tight font-medium">{author.name}</p>
+            <p className="text-sm leading-tight font-medium">{displayAuthor.name}</p>
             <p className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</p>
           </div>
         </div>
@@ -92,10 +96,10 @@ export function CommentThread({ comment, onChanged }: CommentThreadProps) {
       {comment.replies.length > 0 && (
         <div className="mt-3 flex flex-col gap-2 border-l pl-3">
           {comment.replies.map((r) => {
-            const replyAuthor = mockDb.users.find((u) => u.id === r.authorId);
+            const replyAuthor = byId[r.authorId];
             return (
               <div key={r.id} className="flex items-start gap-2">
-                <UserAvatar user={replyAuthor ?? author} size="sm" />
+                <UserAvatar user={replyAuthor ?? displayAuthor} size="sm" />
                 <div>
                   <p className="text-xs font-medium">
                     {replyAuthor?.name ?? "Unknown"}{" "}

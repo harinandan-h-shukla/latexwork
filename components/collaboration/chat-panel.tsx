@@ -10,7 +10,8 @@ import { UserAvatar } from "@/components/collaboration/user-avatar";
 import { MentionTextarea } from "@/components/collaboration/mention-textarea";
 import { extractMentionIds, formatRelativeTime } from "@/components/collaboration/collab-utils";
 import { listChatMessages, sendChatMessage } from "@/lib/mock-api/collaboration";
-import { CURRENT_USER_ID, mockDb } from "@/lib/mock-api/db";
+import { getCurrentUser } from "@/lib/mock-api/auth";
+import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import type { ChatMessage } from "@/lib/types";
 
 export function ChatPanel({ projectId }: { projectId: string }) {
@@ -18,7 +19,13 @@ export function ChatPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const { users, byId } = useProjectUsers(projectId);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => setCurrentUserId(u.id));
+  }, []);
 
   const refresh = useCallback(async () => {
     const list = await listChatMessages(projectId);
@@ -40,7 +47,7 @@ export function ChatPanel({ projectId }: { projectId: string }) {
     if (!draft.trim()) return;
     setSending(true);
     try {
-      const mentions = extractMentionIds(draft, mockDb.users);
+      const mentions = extractMentionIds(draft, users);
       await sendChatMessage(projectId, draft.trim(), mentions);
       if (mentions.length > 0) {
         toast(`Notified ${mentions.length} mentioned collaborator${mentions.length > 1 ? "s" : ""}`);
@@ -66,9 +73,8 @@ export function ChatPanel({ projectId }: { projectId: string }) {
         ) : (
           <ul className="flex flex-col gap-3">
             {messages.map((m) => {
-              const author = mockDb.users.find((u) => u.id === m.authorId);
-              if (!author) return null;
-              const isMe = m.authorId === CURRENT_USER_ID;
+              const author = byId[m.authorId] ?? { id: m.authorId, name: "Unknown" };
+              const isMe = m.authorId === currentUserId;
               return (
                 <li key={m.id} className="flex items-start gap-2">
                   <UserAvatar user={author} size="sm" />
@@ -92,7 +98,7 @@ export function ChatPanel({ projectId }: { projectId: string }) {
         <MentionTextarea
           value={draft}
           onChange={setDraft}
-          users={mockDb.users}
+          users={users}
           placeholder="Message the project… use @ to mention (Enter to send)"
           rows={2}
           onSubmitShortcut={handleSend}
