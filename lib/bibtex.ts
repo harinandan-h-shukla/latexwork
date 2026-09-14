@@ -74,20 +74,38 @@ export function parseBibEntries(raw: string): ParsedBibEntry[] {
   while (i < raw.length) {
     const at = raw.indexOf("@", i);
     if (at === -1) break;
-    const braceStart = raw.indexOf("{", at);
-    if (braceStart === -1) break;
+    // BibTeX allows either { } or ( ) to delimit an entry
+    // (`@article{key, ...}` and `@article(key, ...)` are both valid, and
+    // real .bib files mix them — e.g. `@String(PAMI = {...})` for
+    // journal-abbreviation macros, common in CVPR/IEEE-style bibliographies,
+    // commonly alongside brace-delimited real entries in the same file).
+    // Whichever comes first after `@` is this entry's own opening
+    // delimiter — nothing valid can appear between the type name and it.
+    const braceIdx = raw.indexOf("{", at);
+    const parenIdx = raw.indexOf("(", at);
+    const openIdx = [braceIdx, parenIdx].filter((n) => n !== -1).sort((a, b) => a - b)[0];
+    if (openIdx === undefined) break;
+    const openChar = raw[openIdx];
+    const closeChar = openChar === "{" ? "}" : ")";
 
-    const typeRaw = raw.slice(at + 1, braceStart).trim().toLowerCase();
+    const typeRaw = raw.slice(at + 1, openIdx).trim().toLowerCase();
 
     let depth = 1;
-    let j = braceStart + 1;
+    let j = openIdx + 1;
     while (j < raw.length && depth > 0) {
-      if (raw[j] === "{") depth++;
-      else if (raw[j] === "}") depth--;
+      if (raw[j] === openChar) depth++;
+      else if (raw[j] === closeChar) depth--;
       j++;
     }
-    const body = raw.slice(braceStart + 1, j - 1);
+    const body = raw.slice(openIdx + 1, j - 1);
     i = j;
+
+    // @string/@preamble/@comment are BibTeX directives, not bibliography
+    // entries (@string in particular is common in real academic .bib files,
+    // e.g. `@string{TPAMI = "IEEE Trans. Pattern Anal. Mach. Intell."}` for
+    // journal-name abbreviations) — without this they were parsed as bogus
+    // "misc" entries keyed by the abbreviation text itself.
+    if (typeRaw === "string" || typeRaw === "preamble" || typeRaw === "comment") continue;
 
     const commaIdx = body.indexOf(",");
     const key = (commaIdx === -1 ? body : body.slice(0, commaIdx)).trim();
