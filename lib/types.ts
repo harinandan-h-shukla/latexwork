@@ -149,9 +149,11 @@ export interface ProjectFile {
   mimeType?: string;
   thumbnailUrl?: string;
   linkedUrl?: string;
-  /** Public URL for a binary file's actual bytes (object storage) — set
-   * only for isBinary files that have been uploaded for real. */
-  blobUrl?: string;
+  /** Vercel Blob pathname for a binary file's actual bytes (private access
+   * — not a fetchable URL by itself). Set only for isBinary files that
+   * have been uploaded for real. Use `/api/files/{id}/blob` to fetch the
+   * actual bytes, which authenticates the request server-side. */
+  blobPathname?: string;
   createdAt: string;
   updatedAt: string;
   content?: string;

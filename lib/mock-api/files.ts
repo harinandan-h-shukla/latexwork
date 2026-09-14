@@ -37,7 +37,7 @@ function toProjectFile(doc: HydratedDocument<ProjectFileDoc>): ProjectFile {
     mimeType: obj.mimeType ?? undefined,
     thumbnailUrl: obj.thumbnailUrl ?? undefined,
     linkedUrl: obj.linkedUrl ?? undefined,
-    blobUrl: obj.blobUrl ?? undefined,
+    blobPathname: obj.blobPathname ?? undefined,
     createdAt: new Date(obj.createdAt as Date).toISOString(),
     updatedAt: new Date(obj.updatedAt as Date).toISOString(),
     content: obj.content ?? undefined,
@@ -196,11 +196,11 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
     const name = lastSlash === -1 ? cleanPath : cleanPath.slice(lastSlash + 1);
     if (!name) continue;
     const parentId = await ensureFolder(folderPath);
-    let blobUrl: string | undefined;
+    let blobPathname: string | undefined;
     if (entry.isBinary && entry.content) {
       const bytes = Buffer.from(entry.content, "base64");
       const uploaded = await uploadBinaryFile(`${projectId}/${cleanPath}`, bytes, entry.mimeType);
-      blobUrl = uploaded.url;
+      blobPathname = uploaded.pathname;
     }
     const file = await ProjectFileModel.create({
       projectId,
@@ -212,7 +212,7 @@ export async function importZipTree(projectId: string, entries: ZipImportEntry[]
       isBinary: entry.isBinary,
       sizeBytes: entry.sizeBytes,
       mimeType: entry.mimeType,
-      blobUrl,
+      blobPathname,
       content: entry.isBinary ? undefined : entry.content,
     } as never);
     created.push(file);
@@ -560,11 +560,11 @@ export async function uploadFiles(projectId: string, files: UploadFileInput[]): 
     const created: ProjectFile[] = [];
     for (const f of files) {
       const path = await realPathFor(f.parentId, f.name);
-      let blobUrl: string | undefined;
+      let blobPathname: string | undefined;
       if (f.isBinary && f.content) {
         const bytes = Buffer.from(f.content, "base64");
         const uploaded = await uploadBinaryFile(`${projectId}${path}`, bytes, f.mimeType);
-        blobUrl = uploaded.url;
+        blobPathname = uploaded.pathname;
       }
       const doc = await ProjectFileModel.create({
         projectId,
@@ -576,7 +576,7 @@ export async function uploadFiles(projectId: string, files: UploadFileInput[]): 
         isBinary: f.isBinary,
         sizeBytes: f.sizeBytes,
         mimeType: f.mimeType,
-        blobUrl,
+        blobPathname,
         content: f.isBinary ? undefined : (f.content ?? ""),
       } as never);
       created.push(toProjectFile(doc));

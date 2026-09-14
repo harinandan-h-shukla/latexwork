@@ -21,19 +21,36 @@ function ThumbnailSwatch({ file, size }: { file: ProjectFile; size: "sm" | "lg" 
   );
 }
 
+function isPreviewableImage(file: ProjectFile): boolean {
+  return Boolean(file.blobPathname) && (file.mimeType?.startsWith("image/") ?? false);
+}
+
 export function FileThumbnail({ file }: { file: ProjectFile }) {
+  const previewable = isPreviewableImage(file);
+  const src = previewable ? `/api/files/${file.id}/blob` : undefined;
+
   return (
     <HoverCard>
       <HoverCardTrigger
         render={
-          <span className="inline-flex shrink-0">
-            <ThumbnailSwatch file={file} size="sm" />
+          <span className="inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-[3px]">
+            {previewable ? (
+              // eslint-disable-next-line @next/next/no-img-element -- arbitrary user-uploaded content, not a known-dimension local asset
+              <img src={src} alt="" className="size-full object-cover" />
+            ) : (
+              <ThumbnailSwatch file={file} size="sm" />
+            )}
           </span>
         }
       />
       <HoverCardContent side="right" className="w-auto p-3">
         <div className="flex flex-col items-center gap-2">
-          <ThumbnailSwatch file={file} size="lg" />
+          {previewable ? (
+            // eslint-disable-next-line @next/next/no-img-element -- arbitrary user-uploaded content, not a known-dimension local asset
+            <img src={src} alt={file.name} className="max-h-48 max-w-48 rounded-lg object-contain shadow-sm" />
+          ) : (
+            <ThumbnailSwatch file={file} size="lg" />
+          )}
           <div className="text-center text-xs">
             <div className="max-w-[10rem] truncate font-medium" title={file.name}>
               {file.name}

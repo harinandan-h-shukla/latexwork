@@ -80,10 +80,12 @@ const ProjectFileSchema = new Schema(
     mimeType: String,
     thumbnailUrl: String,
     linkedUrl: String,
-    /** Public Vercel Blob URL for a binary file's actual bytes — see
-     * lib/storage/blob-storage.ts. Binary files never had their content
-     * stored anywhere before this field existed. */
-    blobUrl: String,
+    /** Vercel Blob pathname (private access — see lib/storage/blob-storage.ts)
+     * for a binary file's actual bytes. Binary files never had their
+     * content stored anywhere before this field existed. Not a public URL:
+     * retrieval always goes through the authenticated
+     * app/api/files/[fileId]/blob route. */
+    blobPathname: String,
     /**
      * Text file source. Binary file bytes live in object storage in a real
      * deploy — see storage.ts. Encrypted at rest (AES-256-GCM) via these

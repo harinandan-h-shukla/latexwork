@@ -275,9 +275,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
       // Binary files (images/figures) used to be excluded entirely, which
       // is why \includegraphics always failed on a real compile — they
-      // have real object-storage URLs now (see lib/storage/blob-storage.ts)
-      // instead of never having their bytes stored anywhere at all.
-      const binaryFiles = files.filter((f) => f.type === "file" && f.isBinary && f.blobUrl);
+      // have real object storage now (see lib/storage/blob-storage.ts)
+      // instead of never having their bytes stored anywhere at all. Fetched
+      // via the authenticated proxy route, not a direct blob URL — the
+      // blob store is private, so a raw blobPathname isn't fetchable on
+      // its own anyway.
+      const binaryFiles = files.filter((f) => f.type === "file" && f.isBinary && f.blobPathname);
       const [textInputs, binaryInputs] = await Promise.all([
         Promise.all(
           textFiles.map(async (f) => ({
@@ -288,7 +291,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         ),
         Promise.all(
           binaryFiles.map(async (f) => {
-            const res = await fetch(f.blobUrl!);
+            const res = await fetch(`/api/files/${f.id}/blob`);
             const buf = await res.arrayBuffer();
             return { path: f.path.replace(/^\//, ""), content: arrayBufferToBase64(buf), id: f.id, encoding: "base64" as const };
           })
