@@ -330,7 +330,7 @@ export interface CompileLogEntry {
   line?: number;
 }
 
-export type CompileSource = "local" | "cloud";
+export type CompileSource = "local" | "cloud" | "browser";
 
 export interface CompileResult {
   id: string;

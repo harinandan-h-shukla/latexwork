@@ -17,7 +17,7 @@ const OPTIONS: { value: CompilerPreference; label: string; description: string }
   {
     value: "prefer-local",
     label: "Prefer local compiler",
-    description: "Use the local agent whenever it's available; fall back to cloud otherwise.",
+    description: "Use the local agent whenever it's available; otherwise compile right in this browser.",
   },
   {
     value: "always-cloud",
@@ -119,7 +119,7 @@ export function LocalCompilerPanel({ user, onUserChange }: LocalCompilerPanelPro
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <XCircleIcon className="size-4" />
-                Not connected — using cloud compilation.
+                Not connected — falls back to compiling in this browser.
               </p>
               <Button variant="outline" size="sm" className="h-7 gap-1.5" onClick={() => setInstallDialogOpen(true)}>
                 <DownloadIcon className="size-3.5" />

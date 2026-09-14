@@ -119,7 +119,7 @@ export function BuildMenu({
         {checkingAgent
           ? "Checking…"
           : showDuration
-            ? `${compile!.source === "local" ? "Local" : "Cloud"} · ${(compile!.durationMs! / 1000).toFixed(2)}s`
+            ? `${compile!.source === "local" ? "Local" : compile!.source === "browser" ? "Browser" : "Cloud"} · ${(compile!.durationMs! / 1000).toFixed(2)}s`
             : willUseLocal
               ? "Local compiler"
               : "Cloud compiler"}

@@ -19,6 +19,7 @@ import {
 } from "@/lib/mock-api";
 import { cancelSmart, compileSmart, detectLocal, resolveCompileSource } from "@/lib/local-compiler/compiler-service";
 import type { LocalCompileFileInput } from "@/lib/local-compiler/types";
+import { cancelBrowserCompile, compileBrowser, isBrowserCompileSupported } from "@/lib/browser-compiler/browser-compiler-client";
 
 export type SidePanelId =
   | "outline"
@@ -68,8 +69,8 @@ interface WorkspaceState {
    * persisted to the account (that's the point of "ask each time" as
    * opposed to "prefer-local"/"always-cloud", which are permanent). Reset
    * on every loadProject so a new project asks again. */
-  sessionCompilerChoice: "local" | "cloud" | null;
-  setSessionCompilerChoice: (choice: "local" | "cloud") => void;
+  sessionCompilerChoice: "local" | "cloud" | "browser" | null;
+  setSessionCompilerChoice: (choice: "local" | "cloud" | "browser") => void;
   activeSidePanel: SidePanelId | null;
   setActiveSidePanel: (panel: SidePanelId | null) => void;
   /** Set by the user manually picking a rail icon — suppresses auto-switching until the cursor leaves the current context. */
@@ -295,7 +296,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     if (!projectId) return;
 
     if (isCompiling && inFlight) {
-      cancelSmart(inFlight).catch(() => {});
+      if (inFlight.source === "browser") {
+        cancelBrowserCompile(inFlight).catch(() => {});
+      } else {
+        cancelSmart(inFlight).catch(() => {});
+      }
     }
     const myRunId = ++compileRunId;
     set({ isCompiling: true });
@@ -304,7 +309,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const user = await getCurrentUser();
     const preference = user.editorDefaults.compilerPreference ?? "prefer-local";
     const agentInfo = preference === "always-cloud" ? null : await detectLocal();
-    const source = resolveCompileSource(preference, agentInfo, compiler, get().sessionCompilerChoice);
+    // Environment feature check, not a network probe — see
+    // isBrowserCompileSupported's own comment for why this is synchronous.
+    const browserSupported = preference === "always-cloud" ? false : isBrowserCompileSupported();
+    const source = resolveCompileSource(preference, agentInfo, compiler, get().sessionCompilerChoice, browserSupported);
 
     let smartFiles: LocalCompileFileInput[] = [];
     let mainFilePath = "main.tex";
@@ -358,21 +366,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       ]);
       smartFiles = [...textInputs, ...binaryInputs];
 
-      const result = await compileSmart(
-        {
-          projectId,
-          mainFile: mainFilePath,
-          files: smartFiles,
-          compiler,
-          draftMode: options?.draftMode,
-          shellEscape: options?.shellEscape,
-          incremental: options?.incremental,
-          customCommand: options?.customCommand,
-          simulateTimeout: options?.simulateTimeout,
-        },
-        source,
-        applyIfCurrent
-      );
+      const compileParams = {
+        projectId,
+        mainFile: mainFilePath,
+        files: smartFiles,
+        compiler,
+        draftMode: options?.draftMode,
+        shellEscape: options?.shellEscape,
+        incremental: options?.incremental,
+        customCommand: options?.customCommand,
+        simulateTimeout: options?.simulateTimeout,
+      };
+      // Browser-WASM compiles run entirely on the client — there's no
+      // network request to a compile service to make, so this doesn't go
+      // through compileSmart()'s local/cloud HTTP-request shape at all.
+      // Both paths still return the same CompileResult shape, so nothing
+      // downstream (PdfPreview, CompileToolbar, the log panel) needs to
+      // know which one ran.
+      const result =
+        source === "browser"
+          ? await compileBrowser(compileParams, applyIfCurrent)
+          : await compileSmart(compileParams, source, applyIfCurrent);
 
       if (myRunId === compileRunId) {
         set({ compile: result, lastCompileMainFile: mainFilePath, isCompiling: false });
@@ -415,7 +429,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   cancelCompile: async () => {
     const { compile } = get();
     if (!compile) return;
-    await cancelSmart(compile);
+    if (compile.source === "browser") {
+      await cancelBrowserCompile(compile);
+    } else {
+      await cancelSmart(compile);
+    }
     set({ isCompiling: false });
   },
 }));

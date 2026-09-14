@@ -26,6 +26,12 @@ import {
 import type { CloudBuildStatus, CloudBuildStatusResponse } from "@/lib/cloud-compiler/types";
 
 const LOCAL_CAPABLE_COMPILERS = new Set<Compiler>(["pdflatex", "xelatex", "lualatex"]);
+// Kept in sync with lib/browser-compiler/browser-compiler-client.ts's own
+// BROWSER_CAPABLE_COMPILERS (not imported from there — that module pulls in
+// texlyre-busytex's types and is meant to load only on the client; this
+// file is imported by workspace-store at module scope and should stay free
+// of anything that assumes a browser environment).
+const BROWSER_CAPABLE_COMPILERS = new Set<Compiler>(["pdflatex", "xelatex", "lualatex"]);
 const FINAL_LOCAL_STATUSES: LocalBuildStatus[] = ["success", "error", "timeout", "cancelled"];
 const FINAL_CLOUD_STATUSES: CloudBuildStatus[] = ["success", "error", "timeout", "cancelled"];
 // A real (Mongo ObjectId) project — the only kind the real cloud-compiler
@@ -55,15 +61,40 @@ export function resolveCompileSource(
   // account, unlike the other two preferences). Before this existed,
   // "ask-each-time" was accepted by the schema/type but never actually
   // asked anything — it silently behaved exactly like "prefer-local".
-  sessionChoice?: "local" | "cloud" | null
-): "local" | "cloud" {
+  sessionChoice?: "local" | "cloud" | "browser" | null,
+  // Static environment feature check (WebAssembly + Worker support) — see
+  // isBrowserCompileSupported() in lib/browser-compiler/browser-compiler-client.
+  // Passed in rather than detected here so this function stays a pure,
+  // synchronous, easily-testable decision — same reasoning as agentInfo
+  // being passed in already-resolved instead of this function calling
+  // detectLocal() itself.
+  browserSupported = false
+): "local" | "cloud" | "browser" {
+  // An explicit "always use the cloud" is respected as-is, not silently
+  // rerouted to the browser engine — someone who picked this may
+  // specifically want to avoid spending their own CPU/battery/bandwidth on
+  // a ~500MB-class in-browser compiler, which is a real cost "the cloud"
+  // is meant to avoid, even though today's cloud path falls back to the
+  // mock renderer when the real cloud-compiler service isn't deployed
+  // (see runCloud in this file).
   if (preference === "always-cloud") return "cloud";
-  if (preference === "ask-each-time" && sessionChoice === "cloud") return "cloud";
-  if (!LOCAL_CAPABLE_COMPILERS.has(compiler)) return "cloud";
-  if (!agentInfo) return "cloud";
-  const match = agentInfo.compilers.find((c) => c.name === compiler);
-  if (!match?.available) return "cloud";
-  return "local";
+  if (preference === "ask-each-time") {
+    if (sessionChoice === "cloud") return "cloud";
+    if (sessionChoice === "browser" && browserSupported) return "browser";
+    // sessionChoice === "local" (or "browser" without support) falls
+    // through to the normal local-agent-availability check below, same as
+    // before this function knew about "browser" at all.
+  }
+  if (LOCAL_CAPABLE_COMPILERS.has(compiler) && agentInfo) {
+    const match = agentInfo.compilers.find((c) => c.name === compiler);
+    if (match?.available) return "local";
+  }
+  // local-agent requires a whole separate install this session's owner has
+  // hit real friction with — the in-browser WASM engine needs nothing
+  // installed, so it's the preferred fallback ahead of "cloud" (which,
+  // unlike browser, isn't actually deployed anywhere real yet).
+  if (BROWSER_CAPABLE_COMPILERS.has(compiler) && browserSupported) return "browser";
+  return "cloud";
 }
 
 export interface SmartCompileParams {

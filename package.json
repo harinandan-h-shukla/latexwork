@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "local-mongo": "node scripts/local-mongo.mjs"
+    "local-mongo": "node scripts/local-mongo.mjs",
+    "download-compiler-assets": "texlyre-busytex download-assets ./public/core"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -52,6 +53,7 @@
     "server-only": "^0.0.1",
     "shadcn": "^4.21.0",
     "sonner": "^2.0.8",
+    "texlyre-busytex": "^1.4.0",
     "tw-animate-css": "^1.4.0",
     "zustand": "^5.0.15"
   },

@@ -36,6 +36,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# In-browser WASM LaTeX compiler assets (texlyre-busytex) — ~500MB of
+# wasm/data files fetched from GitHub Releases by `npm run download-compiler-assets`
+# (lib/browser-compiler), not committed: far past what's reasonable to
+# track in git or upload as deployment source (see Vercel's 100MB/1GB
+# static-file-upload limits) or a public GitHub repo's own per-file caps.
+# Provisioned as a deploy-time step instead — see that script's own
+# comments for the current, real caveats around this.
+/public/core/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

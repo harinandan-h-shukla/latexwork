@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LaptopIcon, CloudIcon, RepeatIcon } from "lucide-react";
+import { LaptopIcon, CloudIcon, RepeatIcon, GlobeIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +29,7 @@ export function CompilerChoiceDialog() {
   const setSessionChoice = useWorkspaceStore((s) => s.setSessionCompilerChoice);
 
   const [mode, setMode] = useState<"none" | "first-choice" | "ask-each-time">("none");
-  const [saving, setSaving] = useState<CompilerPreference | "local" | "cloud" | null>(null);
+  const [saving, setSaving] = useState<CompilerPreference | "local" | "cloud" | "browser" | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -66,7 +66,7 @@ export function CompilerChoiceDialog() {
     }
   }
 
-  function chooseForThisProject(choice: "local" | "cloud") {
+  function chooseForThisProject(choice: "local" | "cloud" | "browser") {
     setSessionChoice(choice);
     setMode("none");
   }
@@ -94,7 +94,8 @@ export function CompilerChoiceDialog() {
                 <span>
                   <span className="block font-medium">Prefer my computer</span>
                   <span className="block text-xs text-muted-foreground">
-                    Uses local-agent when available, falls back to the cloud otherwise
+                    Uses local-agent when it&apos;s running, otherwise compiles right here in
+                    this browser — recommended if you haven&apos;t set up local-agent
                   </span>
                 </span>
               </Button>
@@ -108,7 +109,7 @@ export function CompilerChoiceDialog() {
                 <span>
                   <span className="block font-medium">Always use the cloud</span>
                   <span className="block text-xs text-muted-foreground">
-                    No local setup needed — works from any device
+                    No local setup and nothing downloaded to this device
                   </span>
                 </span>
               </Button>
@@ -140,6 +141,10 @@ export function CompilerChoiceDialog() {
               <Button variant="outline" className="gap-1.5" onClick={() => chooseForThisProject("local")}>
                 <LaptopIcon className="size-4 text-emerald-500" />
                 My computer
+              </Button>
+              <Button variant="outline" className="gap-1.5" onClick={() => chooseForThisProject("browser")}>
+                <GlobeIcon className="size-4 text-fuchsia-500" />
+                This browser
               </Button>
               <Button variant="outline" className="gap-1.5" onClick={() => chooseForThisProject("cloud")}>
                 <CloudIcon className="size-4 text-sky-500" />
