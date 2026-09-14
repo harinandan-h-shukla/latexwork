@@ -183,7 +183,7 @@ export function CompileToolbar() {
           nativeButton={false}
           render={<Link href="/settings#local-compiler" />}
         >
-          <SettingsIcon className="size-3.5" />
+          <SettingsIcon className="size-3.5 text-slate-500" />
           Compiler options
         </Button>
 

@@ -137,29 +137,29 @@ export function FileMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1" />}>
-          <FileIcon className="size-3.5" />
+          <FileIcon className="size-3.5 text-sky-500" />
           File
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem onClick={handleSave} disabled={!activeFileId || !isDirty}>
-            <SaveIcon />
+            <SaveIcon className="text-emerald-500" />
             Save
           </DropdownMenuItem>
           <DropdownMenuItem onClick={openSaveAs} disabled={!activeFileId}>
-            <SaveIcon />
+            <SaveIcon className="text-emerald-500" />
             Save as…
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleDownload} disabled={!activeFileId}>
-            <DownloadIcon />
+            <DownloadIcon className="text-indigo-500" />
             Download
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => void handleDownloadLocalCopy()}
             disabled={!projectId || savingLocalCopy}
           >
-            <DownloadIcon />
+            <DownloadIcon className="text-indigo-500" />
             Download source + PDF
           </DropdownMenuItem>
         </DropdownMenuContent>

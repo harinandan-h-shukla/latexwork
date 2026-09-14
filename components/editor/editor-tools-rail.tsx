@@ -50,10 +50,17 @@ export function EditorToolsRail({ tools }: { tools: EditorToolsState }) {
     setSymbolPaletteOpen,
   } = tools;
 
+  // Colored consistently with the right-hand SidePanelRail's always-visible
+  // (not just active-state) icon color, per explicit design feedback that a
+  // flat/monochrome rail next to a colorful one reads as unfinished. These
+  // aren't parallel content domains the way Research/References/etc. are,
+  // so the colors here are just a differentiating accent per tool rather
+  // than a meaningful category code — active/toggled-on state is still
+  // shown the same way as before (bg-accent), layered under the color.
   function railButtonClass(active: boolean) {
     return cn(
-      "flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
-      active && "bg-accent text-foreground"
+      "flex size-8 items-center justify-center rounded-md hover:bg-accent",
+      active && "bg-accent"
     );
   }
 
@@ -64,28 +71,28 @@ export function EditorToolsRail({ tools }: { tools: EditorToolsState }) {
         onClick={() => setLineNumbersVisible((v) => !v)}
         className={railButtonClass(lineNumbersVisible)}
       >
-        <HashIcon className="size-4" />
+        <HashIcon className="size-4 text-sky-500" />
       </button>
       <button
         title="Show whitespace"
         onClick={() => setShowWhitespace((v) => !v)}
         className={railButtonClass(showWhitespace)}
       >
-        <EyeIcon className="size-4" />
+        <EyeIcon className="size-4 text-cyan-500" />
       </button>
       <button
         title="Split pane"
         onClick={() => setSplitPaneOpen((v) => !v)}
         className={railButtonClass(splitPaneOpen)}
       >
-        <Columns2Icon className="size-4" />
+        <Columns2Icon className="size-4 text-indigo-500" />
       </button>
 
       <div className="my-1 h-px w-6 bg-border" />
 
       <Popover>
         <PopoverTrigger render={<button title={`Keybindings: ${KEYBINDING_LABELS[keybindingMode]}`} className={railButtonClass(keybindingMode !== "default")} />}>
-          <KeyboardIcon className="size-4" />
+          <KeyboardIcon className="size-4 text-fuchsia-500" />
         </PopoverTrigger>
         <PopoverContent side="right" className="w-40 p-1" align="start">
           {(Object.keys(KEYBINDING_LABELS) as KeybindingMode[]).map((mode) => (
@@ -104,10 +111,10 @@ export function EditorToolsRail({ tools }: { tools: EditorToolsState }) {
       </Popover>
 
       <button title="Go to line (Ctrl/Cmd+G)" onClick={() => setGoToLineOpen(true)} className={railButtonClass(false)}>
-        <CornerDownRightIcon className="size-4" />
+        <CornerDownRightIcon className="size-4 text-emerald-500" />
       </button>
       <button title="Rename symbol / label" onClick={() => setRenameOpen(true)} className={railButtonClass(false)}>
-        <PencilLineIcon className="size-4" />
+        <PencilLineIcon className="size-4 text-rose-500" />
       </button>
       <button
         title="Math symbols"
@@ -115,7 +122,7 @@ export function EditorToolsRail({ tools }: { tools: EditorToolsState }) {
         onClick={() => setSymbolPaletteOpen(true)}
         className={cn(railButtonClass(false), "disabled:opacity-40")}
       >
-        <SigmaIcon className="size-4" />
+        <SigmaIcon className="size-4 text-amber-500" />
       </button>
 
       <div className="my-1 h-px w-6 bg-border" />
@@ -133,7 +140,7 @@ export function EditorToolsRail({ tools }: { tools: EditorToolsState }) {
         onClick={() => setLintEnabled((v) => !v)}
         className={railButtonClass(lintEnabled)}
       >
-        <span className="text-[10px] font-semibold">Lint</span>
+        <span className="text-[10px] font-semibold text-teal-500">Lint</span>
       </button>
     </div>
   );

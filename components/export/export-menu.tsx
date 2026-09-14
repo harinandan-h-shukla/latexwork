@@ -41,7 +41,7 @@ export function ExportMenu({ projectId }: { projectId: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1.5" />}>
-        <DownloadIcon className="size-3.5" />
+        <DownloadIcon className="size-3.5 text-emerald-500" />
         Export
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -50,13 +50,13 @@ export function ExportMenu({ projectId }: { projectId: string }) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => handleExport("pdf")} disabled={exporting !== null}>
-          <FileTextIcon /> Compiled PDF
+          <FileTextIcon className="text-rose-500" /> Compiled PDF
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleExport("zip")} disabled={exporting !== null}>
-          <FileArchiveIcon /> Full source (.zip)
+          <FileArchiveIcon className="text-amber-500" /> Full source (.zip)
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleExport("inlined-tex")} disabled={exporting !== null}>
-          <FileTextIcon /> Single inlined .tex
+          <FileTextIcon className="text-sky-500" /> Single inlined .tex
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

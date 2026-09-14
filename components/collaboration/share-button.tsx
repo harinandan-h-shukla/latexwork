@@ -54,7 +54,7 @@ export function ShareButton({ projectId }: { projectId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant="outline" size="sm" className="gap-1.5" />}>
-        <Share2Icon className="size-3.5" />
+        <Share2Icon className="size-3.5 text-fuchsia-500" />
         Share
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">

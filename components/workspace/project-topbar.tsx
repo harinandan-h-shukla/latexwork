@@ -158,7 +158,7 @@ export function ProjectTopbar({ projectId, projectName }: ProjectTopbarProps) {
         {isEditorTab && (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-1" />}>
-              <LayoutIcon className="size-3.5" />
+              <LayoutIcon className="size-3.5 text-indigo-500" />
               Layout
               <ChevronDownIcon className="size-3 text-muted-foreground" />
             </DropdownMenuTrigger>
