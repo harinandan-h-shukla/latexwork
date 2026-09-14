@@ -196,6 +196,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   saveFileContent: async (fileId) => {
     const content = get().fileContents[fileId];
     if (content === undefined) return;
+    // Safety net against silently wiping real work: a debounced autosave or
+    // the close-time bulk flush (flushDirtySaves in editor-workspace.tsx)
+    // firing with stale/blank in-memory content — e.g. from a race during a
+    // file or project switch — would otherwise persist empty content over
+    // a file that's known to have had real content, with nothing to notice
+    // or undo it. Confirmed this actually happened: several real files in
+    // real projects were found with identical near-simultaneous
+    // updatedAt timestamps, all emptied in one bulk-save burst. A file
+    // that's *always* been empty (new/blank) still saves normally — this
+    // only blocks the specific "had real content, now suddenly doesn't"
+    // pattern, which is never a normal single keystroke.
+    const file = get().files.find((f) => f.id === fileId);
+    const looksLikeAccidentalWipe = content.trim().length === 0 && (file?.sizeBytes ?? 0) > 200;
+    if (looksLikeAccidentalWipe) {
+      console.error(
+        `Refused to save empty content over "${file?.name}" (was ${file?.sizeBytes} bytes) — looks like an ` +
+          `accidental wipe, not an intentional edit. Reload the project before editing this file further.`
+      );
+      return;
+    }
     await updateFileContent(fileId, content);
     set((state) => {
       const next = new Set(state.dirtyFileIds);
