@@ -329,7 +329,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       // store is never populated for real projects anymore). Passing the
       // current live file contents explicitly works for both paths and
       // doesn't depend on where "the current files" happen to be stored.
-      const mainFile = files.find((f) => f.isMain) ?? files.find((f) => f.type === "file" && f.name.endsWith(".tex"));
+      // If the file currently open in the editor is itself a standalone
+      // compilable document (contains \documentclass), compile THAT one
+      // instead of the project's designated main file — requested for
+      // projects that bundle several independent papers as folders inside
+      // one Inkwell project (each with its own \documentclass), where the
+      // useful behavior is "compile whichever paper I'm looking at", not
+      // always the one fixed main file. Doesn't touch the stored isMain
+      // flag — a project that's genuinely one document with \input{}-ed
+      // sections (where the open file usually ISN'T a \documentclass file)
+      // keeps compiling its real main file exactly as before.
+      const { activeFileId } = get();
+      const activeFile = files.find((f) => f.id === activeFileId && f.type === "file" && !f.isBinary);
+      const activeFileContent = activeFile ? fileContents[activeFile.id] : undefined;
+      const activeFileIsStandalone =
+        activeFile && activeFileContent !== undefined && activeFileContent.includes("\\documentclass");
+
+      const mainFile = activeFileIsStandalone
+        ? activeFile
+        : (files.find((f) => f.isMain) ?? files.find((f) => f.type === "file" && f.name.endsWith(".tex")));
       mainFilePath = (mainFile?.path ?? "/main.tex").replace(/^\//, "");
       const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
       // Binary files (images/figures) used to be excluded entirely, which
