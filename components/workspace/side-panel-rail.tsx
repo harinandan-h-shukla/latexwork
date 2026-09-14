@@ -8,9 +8,9 @@ import {
   MessageSquareIcon,
   CheckCircleIcon,
   NotebookPenIcon,
-  MoreHorizontalIcon,
   MessagesSquareIcon,
   TerminalIcon,
+  MoreHorizontalIcon,
   HistoryIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
@@ -23,13 +23,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const RAIL_ITEMS: Array<{ id: SidePanelId; label: string; shortcut?: string; icon: typeof SparklesIcon }> = [
-  { id: "papers", label: "Research", icon: SparklesIcon },
-  { id: "reference", label: "References", shortcut: "⌘⇧C", icon: BookMarkedIcon },
-  { id: "search", label: "Search", icon: SearchIcon },
-  { id: "comments", label: "Comments", icon: MessageSquareIcon },
-  { id: "review", label: "Review", icon: CheckCircleIcon },
-  { id: "notes", label: "Notes", icon: NotebookPenIcon },
+const RAIL_ITEMS: Array<{ id: SidePanelId; label: string; shortcut?: string; icon: typeof SparklesIcon; color: string }> = [
+  { id: "papers", label: "Research", icon: SparklesIcon, color: "var(--icon-research)" },
+  { id: "reference", label: "References", shortcut: "⌘⇧C", icon: BookMarkedIcon, color: "var(--icon-reference)" },
+  { id: "search", label: "Search", icon: SearchIcon, color: "var(--icon-search)" },
+  { id: "comments", label: "Comments", icon: MessageSquareIcon, color: "var(--icon-comments)" },
+  { id: "review", label: "Review", icon: CheckCircleIcon, color: "var(--icon-review)" },
+  { id: "notes", label: "Notes", icon: NotebookPenIcon, color: "var(--icon-notes)" },
+  // Promoted out of the "More" dropdown — they used to show only as text
+  // rows there (no color, no presence in the rail itself), which is what
+  // read as an undifferentiated "dot" next to the properly-iconed panels.
+  { id: "chat", label: "Chat", icon: MessagesSquareIcon, color: "var(--icon-chat)" },
+  { id: "log", label: "Log", icon: TerminalIcon, color: "var(--icon-log)" },
 ];
 
 /** Right-hand utility rail — a narrow, always-visible column of contextual
@@ -45,7 +50,7 @@ export function SidePanelRail({ projectId }: { projectId: string }) {
 
   return (
     <div className="glass-surface-subtle flex w-16 shrink-0 flex-col items-center gap-1.5 border-l py-2">
-      {RAIL_ITEMS.map(({ id, label, shortcut, icon: Icon }) => {
+      {RAIL_ITEMS.map(({ id, label, shortcut, icon: Icon, color }) => {
         const active = activeSidePanel === id;
         const isLiveCiteContext = id === "reference" && !!cursorContext && !active;
         return (
@@ -54,13 +59,13 @@ export function SidePanelRail({ projectId }: { projectId: string }) {
             title={isLiveCiteContext ? `Reference: ${cursorContext?.key}` : `${label}${shortcut ? ` (${shortcut})` : ""}`}
             onClick={() => setActiveSidePanel(id)}
             className={cn(
-              "flex size-10 flex-col items-center justify-center gap-0.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
-              active && "bg-accent text-foreground",
-              isLiveCiteContext && "text-primary"
+              "flex size-10 flex-col items-center justify-center gap-0.5 rounded-md text-muted-foreground hover:bg-accent",
+              active && "bg-accent",
+              isLiveCiteContext && "ring-1 ring-primary/40"
             )}
           >
-            <Icon className="size-5" />
-            <span className="text-[9px] leading-none">{label}</span>
+            <Icon className="size-5" style={{ color }} />
+            <span className="text-[9px] leading-none text-foreground">{label}</span>
           </button>
         );
       })}
@@ -79,20 +84,12 @@ export function SidePanelRail({ projectId }: { projectId: string }) {
             <span className="text-[9px] leading-none">More</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="left" align="end">
-            <DropdownMenuItem onClick={() => setActiveSidePanel("chat")}>
-              <MessagesSquareIcon />
-              Chat
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setActiveSidePanel("log")}>
-              <TerminalIcon />
-              Compile log
-            </DropdownMenuItem>
             <DropdownMenuItem render={<Link href={`/projects/${projectId}/history`} />}>
-              <HistoryIcon />
+              <HistoryIcon className="text-violet-500" />
               Version history
             </DropdownMenuItem>
             <DropdownMenuItem render={<Link href="/settings" />}>
-              <SlidersHorizontalIcon />
+              <SlidersHorizontalIcon className="text-slate-500" />
               Local compiler settings
             </DropdownMenuItem>
           </DropdownMenuContent>

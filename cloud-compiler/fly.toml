@@ -1,0 +1,33 @@
+# Rename `app` to whatever you claim with `fly apps create <name>` before
+# the first `fly deploy`. Set secrets separately (never in this file):
+#   fly secrets set CLOUD_COMPILER_SHARED_SECRET=<a long random value>
+# The same value goes into the Vercel project as CLOUD_COMPILER_SHARED_SECRET,
+# and CLOUD_COMPILER_URL there should be this app's https://<app>.fly.dev.
+app = "inkwell-cloud-compiler"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+# TeX Live plus real compiles are memory-hungry; the full texlive/texlive
+# image alone is several GB, so this needs more than Fly's smallest tier.
+# Bump further if you raise CLOUD_COMPILER_MAX_CONCURRENT_BUILDS.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

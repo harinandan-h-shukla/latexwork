@@ -1,0 +1,55 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+%%%%%%%%% PAPER TYPE — WACV author kit (wacv.sty): "review" for the
+% anonymous review copy, drop it for the camera-ready version, per the
+% official kit's own instructions.
+\usepackage[review,algorithms,pagenumbers]{wacv}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage[pagebackref,breaklinks,colorlinks]{hyperref}
+\usepackage[capitalize]{cleveref}
+
+%%%%%%%%% PAPER ID
+\def\wacvPaperID{****}
+\def\confName{WACV}
+\def\confYear{2027}
+
+\begin{document}
+
+%%%%%%%%% TITLE
+\title{Paper Title}
+
+\author{Anonymous WACV submission\\
+Paper ID \wacvPaperID}
+
+\maketitle
+
+\begin{abstract}
+This document is a template for a WACV submission. It uses the official
+WACV author kit style (\texttt{wacv.sty}) for the two-column review format.
+\end{abstract}
+
+\section{Introduction}
+This is the introduction section.
+
+\section{Related Work}
+This is the related work section.
+
+\section{Method}
+This is the method section.
+
+\section{Experiments}
+This is the experiments section.
+
+\section{Conclusion}
+This is the conclusion.
+
+{\small
+\bibliographystyle{ieee_fullname}
+\bibliography{references}
+}
+
+\end{document}

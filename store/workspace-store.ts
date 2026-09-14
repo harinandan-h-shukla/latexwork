@@ -7,6 +7,7 @@ import {
   duplicateFile,
   getCurrentUser,
   getFileContent,
+  id,
   listFiles,
   moveFile,
   renameFile,
@@ -267,24 +268,58 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       set({ compile: partial });
     };
 
-    const result = await compileSmart(
-      {
-        projectId,
-        mainFile: mainFilePath,
-        files: smartFiles,
-        compiler,
-        draftMode: options?.draftMode,
-        shellEscape: options?.shellEscape,
-        incremental: options?.incremental,
-        customCommand: options?.customCommand,
-        simulateTimeout: options?.simulateTimeout,
-      },
-      source,
-      applyIfCurrent
-    );
+    try {
+      const result = await compileSmart(
+        {
+          projectId,
+          mainFile: mainFilePath,
+          files: smartFiles,
+          compiler,
+          draftMode: options?.draftMode,
+          shellEscape: options?.shellEscape,
+          incremental: options?.incremental,
+          customCommand: options?.customCommand,
+          simulateTimeout: options?.simulateTimeout,
+        },
+        source,
+        applyIfCurrent
+      );
 
-    if (myRunId === compileRunId) {
-      set({ compile: result, isCompiling: false });
+      if (myRunId === compileRunId) {
+        set({ compile: result, isCompiling: false });
+      }
+    } catch (err) {
+      // Without this, any uncaught failure in compileSmart (both the local
+      // and cloud paths call out to network services that can be down/
+      // misconfigured) left isCompiling stuck true forever with no error
+      // surfaced anywhere — indistinguishable from "compile silently does
+      // nothing," which is exactly the symptom this closes.
+      if (myRunId === compileRunId) {
+        set({
+          isCompiling: false,
+          compile: {
+            id: id("compile-error"),
+            projectId,
+            status: "error",
+            compiler,
+            draftMode: Boolean(options?.draftMode),
+            startedAt: null,
+            finishedAt: new Date().toISOString(),
+            queuePosition: null,
+            etaSeconds: null,
+            pdfUrl: null,
+            pageCount: null,
+            log: [
+              {
+                id: id("log"),
+                severity: "error",
+                message: `Compile failed to start: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            synctex: [],
+          },
+        });
+      }
     }
   },
 

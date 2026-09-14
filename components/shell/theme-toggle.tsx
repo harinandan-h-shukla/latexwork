@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 
@@ -18,13 +19,25 @@ const OPTIONS = [
   { value: "system", label: "System", icon: MonitorIcon },
 ] as const;
 
+function subscribeNoop() {
+  return () => {};
+}
+
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  // next-themes actually resolves the stored theme from localStorage
+  // synchronously on the client's first render (not after, despite what it
+  // might look like from `theme` being typed as possibly-undefined) — so
+  // gating on `theme` alone still mismatches the server's render whenever a
+  // user has a saved "light"/"dark" preference. useSyncExternalStore's
+  // server/client snapshot split is the purpose-built tool for exactly this
+  // "value differs between server and client" case — it reports `false`
+  // (matching the server) for the render that hydrates, then `true` after,
+  // without a manual effect+setState (which this repo's stricter purity
+  // lint flags, and which needlessly cascades an extra render anyway).
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
-  // `theme` is undefined until next-themes resolves it client-side, so this
-  // naturally falls back to MonitorIcon on both the server render and the
-  // first client render, avoiding a hydration mismatch without extra state.
-  const ActiveIcon = OPTIONS.find((o) => o.value === theme)?.icon ?? MonitorIcon;
+  const ActiveIcon = mounted ? (OPTIONS.find((o) => o.value === theme)?.icon ?? MonitorIcon) : MonitorIcon;
 
   return (
     <DropdownMenu>

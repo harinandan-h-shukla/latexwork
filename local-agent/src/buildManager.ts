@@ -229,6 +229,18 @@ export class BuildManager {
       "-interaction=nonstopmode",
       "-file-line-error",
       "-halt-on-error",
+      // Force a real rebuild instead of trusting latexmk's file-timestamp
+      // dependency check. Without this, an edit-then-recompile can land in
+      // the same filesystem timestamp tick as the previous run (or the
+      // rewritten file otherwise doesn't read as "newer" to latexmk's
+      // heuristic), so latexmk logs "Nothing to do for X" and silently
+      // reuses the old PDF — this build reports "success" with the existing
+      // pdfPath (fs.existsSync sees the stale file) and there is no error to
+      // surface, which is exactly the "compile does nothing" symptom this
+      // fixes. The workDir is still reused across compiles for latexmk's
+      // aux/bbl caching, so this only forces the top-level "did anything
+      // change" check to always say yes, not a full clean rebuild.
+      "-g",
       `-outdir=${record.outDir}`,
     ];
     if (validated.options.shellEscape) args.push("-shell-escape");

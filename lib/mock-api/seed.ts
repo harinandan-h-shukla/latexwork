@@ -202,6 +202,16 @@ const templates: Template[] = [
     isOwn: false,
   },
   {
+    id: "tpl_wacv_conf",
+    name: "WACV Conference Paper",
+    category: "journal",
+    publisher: "WACV",
+    description: "Official WACV author-kit style (two-column, review format) with the real wacv.sty and IEEE full-name bibliography style.",
+    thumbnailUrl: "/templates/wacv-conf.svg",
+    sourceProjectId: "seed_wacv_conf",
+    isOwn: false,
+  },
+  {
     id: "tpl_acm_sigconf",
     name: "ACM SIGCONF Proceedings",
     category: "journal",

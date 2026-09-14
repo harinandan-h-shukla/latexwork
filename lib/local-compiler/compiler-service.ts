@@ -1,4 +1,4 @@
-import type { CompileResult, Compiler, CompilerPreference } from "@/lib/types";
+import type { CompileResult, CompileLogEntry, Compiler, CompilerPreference } from "@/lib/types";
 import { compileProject, id, stopCompile, type CompileOptions } from "@/lib/mock-api";
 import {
   cancelLocalBuild,
@@ -14,9 +14,17 @@ import type {
   LocalBuildStatusResponse,
   LocalCompileFileInput,
 } from "@/lib/local-compiler/types";
+import { cancelCloudCompile, getCloudCompileStatus, startCloudCompile } from "@/lib/cloud-compiler/actions";
+import type { CloudBuildStatus, CloudBuildStatusResponse } from "@/lib/cloud-compiler/types";
 
 const LOCAL_CAPABLE_COMPILERS = new Set<Compiler>(["pdflatex", "xelatex", "lualatex"]);
 const FINAL_LOCAL_STATUSES: LocalBuildStatus[] = ["success", "error", "timeout", "cancelled"];
+const FINAL_CLOUD_STATUSES: CloudBuildStatus[] = ["success", "error", "timeout", "cancelled"];
+// A real (Mongo ObjectId) project — the only kind the real cloud-compiler
+// service has files for. A legacy mock project id still uses the fake
+// client-side renderer, since there's no real file storage behind it to
+// compile in the first place.
+const REAL_PROJECT_ID_RE = /^[0-9a-f]{24}$/i;
 
 let cachedAgentInfo: LocalAgentInfo | null = null;
 let cachedAt = 0;
@@ -149,7 +157,83 @@ async function runLocal(
   });
 }
 
-async function runCloud(
+function toCompileResultFromCloud(
+  status: CloudBuildStatusResponse,
+  compiler: Compiler,
+  draftMode: boolean
+): CompileResult {
+  const log: CompileLogEntry[] = status.log.map((entry, i) => ({
+    id: `${status.buildId}-log-${i}`,
+    severity: entry.severity,
+    message: entry.message,
+    fileId: entry.file,
+    line: entry.line,
+  }));
+  return {
+    id: status.buildId,
+    projectId: status.projectId,
+    status: status.status === "cancelled" ? "stopped" : status.status,
+    compiler,
+    draftMode,
+    startedAt: status.startedAt,
+    finishedAt: status.finishedAt,
+    queuePosition: status.status === "queued" ? 1 : null,
+    etaSeconds: null,
+    pdfUrl: status.pdfUrl ? `/api/cloud-compile/${status.buildId}/pdf` : null,
+    pageCount: null,
+    log,
+    synctex: [],
+    source: "cloud",
+    durationMs: status.durationMs,
+  };
+}
+
+/** Real cloud compile for a real (Mongo) project: kick off the build via the
+ * cloud-compiler/ service (proxied through lib/cloud-compiler/actions.ts so
+ * the shared secret never reaches the browser) and poll status the same way
+ * runLocal() polls the local agent — no WebSocket push for cloud, interval
+ * polling only (see the "explicitly out of scope" note in the plan). */
+async function runRealCloud(
+  params: SmartCompileParams,
+  onUpdate: (partial: CompileResult) => void
+): Promise<CompileResult> {
+  const { buildId } = await startCloudCompile({
+    projectId: params.projectId,
+    mainFile: params.mainFile,
+    files: params.files,
+    compiler: params.compiler,
+    draftMode: params.draftMode,
+    shellEscape: params.shellEscape,
+  });
+
+  return new Promise<CompileResult>((resolve, reject) => {
+    let settled = false;
+    const finish = (status: CloudBuildStatusResponse) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(pollTimer);
+      resolve(toCompileResultFromCloud(status, params.compiler, Boolean(params.draftMode)));
+    };
+    const pollTimer: ReturnType<typeof setInterval> = setInterval(() => {
+      getCloudCompileStatus(buildId)
+        .then((status) => {
+          if (settled) return;
+          onUpdate(toCompileResultFromCloud(status, params.compiler, Boolean(params.draftMode)));
+          if (FINAL_CLOUD_STATUSES.includes(status.status)) finish(status);
+        })
+        .catch((err) => {
+          if (settled) return;
+          settled = true;
+          clearInterval(pollTimer);
+          reject(err instanceof Error ? err : new Error(String(err)));
+        });
+    }, 1000);
+  });
+}
+
+/** Legacy mock projects have no real file storage for a real service to
+ * compile, so they keep the existing client-side fake renderer unchanged. */
+async function runMockCloud(
   params: SmartCompileParams,
   onUpdate: (partial: CompileResult) => void
 ): Promise<CompileResult> {
@@ -169,6 +253,38 @@ async function runCloud(
     (partial) => onUpdate(tag(partial))
   );
   return tag(result);
+}
+
+async function runCloud(
+  params: SmartCompileParams,
+  onUpdate: (partial: CompileResult) => void
+): Promise<CompileResult> {
+  if (REAL_PROJECT_ID_RE.test(params.projectId)) {
+    try {
+      return await runRealCloud(params, onUpdate);
+    } catch (err) {
+      // The real cloud-compiler service isn't deployed/configured yet in
+      // every environment (CLOUD_COMPILER_URL/CLOUD_COMPILER_SHARED_SECRET),
+      // and even once it is, it can be unreachable. Falling back to the
+      // approximate mock renderer — same resilience pattern as the
+      // local→cloud fallback below — beats leaving the user with a
+      // permanently-stuck "compiling" state and no error, which is what an
+      // uncaught rejection here did before this fix.
+      const result = await runMockCloud(params, onUpdate);
+      return {
+        ...result,
+        log: [
+          {
+            id: id("log"),
+            severity: "warning",
+            message: `Real cloud compilation unavailable (${err instanceof Error ? err.message : String(err)}) — showing an approximate preview instead, not a real compile.`,
+          },
+          ...result.log,
+        ],
+      };
+    }
+  }
+  return runMockCloud(params, onUpdate);
 }
 
 export async function compileSmart(
@@ -212,6 +328,8 @@ export async function compileSmart(
 export async function cancelSmart(result: CompileResult): Promise<void> {
   if (result.source === "local") {
     await cancelLocalBuild(result.id);
+  } else if (REAL_PROJECT_ID_RE.test(result.projectId)) {
+    await cancelCloudCompile(result.id);
   } else {
     await stopCompile(result.id);
   }

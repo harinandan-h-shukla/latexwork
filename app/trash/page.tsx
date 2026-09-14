@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -28,6 +30,60 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+/** Permanent delete is the one truly irreversible action on this page (unlike
+ * the soft-delete-to-trash flow elsewhere, which always has an Undo toast) —
+ * requiring the project's exact name before the destructive button enables
+ * is a deliberate extra friction step, same pattern GitHub uses for repo
+ * deletion. Its own component so each row's typed text is independent local
+ * state, not one shared field across every row in the table. */
+function DeleteForeverDialog({
+  projectName,
+  onConfirm,
+}: {
+  projectName: string;
+  onConfirm: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState("");
+  const matches = confirmText === projectName;
+
+  return (
+    <AlertDialog onOpenChange={(open) => !open && setConfirmText("")}>
+      <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+        <Trash2Icon />
+        Delete forever
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Permanently delete project?</AlertDialogTitle>
+          <AlertDialogDescription>
+            &ldquo;{projectName}&rdquo; and all of its files will be deleted permanently. This
+            action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="confirm-delete-name" className="text-sm">
+            Type <span className="font-semibold">{projectName}</span> to confirm.
+          </Label>
+          <Input
+            id="confirm-delete-name"
+            autoFocus
+            autoComplete="off"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={projectName}
+          />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={!matches} onClick={onConfirm}>
+            Delete permanently
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export default function TrashPage() {
   const projects = useProjectsStore((s) => s.projects);
@@ -114,30 +170,10 @@ export default function TrashPage() {
                           <RotateCcwIcon />
                           Restore
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
-                            <Trash2Icon />
-                            Delete forever
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Permanently delete project?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                &ldquo;{project.name}&rdquo; and all of its files will be deleted
-                                permanently. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                variant="destructive"
-                                onClick={() => void handleDelete(project.id, project.name)}
-                              >
-                                Delete permanently
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <DeleteForeverDialog
+                          projectName={project.name}
+                          onConfirm={() => void handleDelete(project.id, project.name)}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>

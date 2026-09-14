@@ -13,6 +13,13 @@ import { importZipTree, type ZipImportEntry } from "@/lib/mock-api/files";
 const TEMPLATE_ASSETS: Record<string, { dir: string; files: string[] }> = {
   tpl_ieee_conf: { dir: "ieee-conference", files: ["main.tex", "IEEEtran.cls"] },
   tpl_arxiv_preprint: { dir: "arxiv-preprint", files: ["main.tex", "references.bib"] },
+  // Real official WACV author-kit files (wacv.sty, ieee_fullname.bst) —
+  // same publicly-distributed-by-the-conference status as IEEEtran.cls
+  // above, not fabricated/reconstructed content.
+  tpl_wacv_conf: {
+    dir: "wacv-conference",
+    files: ["main.tex", "wacv.sty", "ieee_fullname.bst", "references.bib"],
+  },
 };
 
 async function populateTemplateFiles(projectId: string, templateId: string): Promise<void> {
