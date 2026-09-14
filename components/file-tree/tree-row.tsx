@@ -21,6 +21,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -97,6 +100,7 @@ export function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
   const renameFileNode = useWorkspaceStore((s) => s.renameFileNode);
   const duplicateFileNode = useWorkspaceStore((s) => s.duplicateFileNode);
   const setMainFileNode = useWorkspaceStore((s) => s.setMainFileNode);
+  const setFolderMainFileNode = useWorkspaceStore((s) => s.setFolderMainFileNode);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(node.name);
 
@@ -272,6 +276,29 @@ export function TreeRow({ node, depth }: { node: TreeNode; depth: number }) {
                 Set as main file
               </DropdownMenuItem>
             )}
+            {isFolder &&
+              (() => {
+                const texChildren = node.children.filter(
+                  (c) => c.type === "file" && c.name.endsWith(".tex")
+                );
+                if (texChildren.length === 0) return null;
+                return (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Set main file for this folder</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {texChildren.map((c) => (
+                        <DropdownMenuItem
+                          key={c.id}
+                          onClick={() => setFolderMainFileNode(node.id, c.id)}
+                        >
+                          {node.folderMainFileId === c.id && <StarIcon className="size-3.5 fill-amber-400 text-amber-400" />}
+                          {c.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                );
+              })()}
             {!isFolder && (
               <DropdownMenuItem onClick={() => ctx.onDownloadNode(node.id)}>
                 <DownloadIcon className="size-3.5" />

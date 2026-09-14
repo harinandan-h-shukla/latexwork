@@ -33,6 +33,7 @@ function toProjectFile(doc: HydratedDocument<ProjectFileDoc>): ProjectFile {
     name: obj.name,
     path: obj.path,
     isMain: obj.isMain,
+    folderMainFileId: obj.folderMainFileId ? String(obj.folderMainFileId) : null,
     isBinary: obj.isBinary,
     sizeBytes: obj.sizeBytes,
     mimeType: obj.mimeType ?? undefined,
@@ -549,6 +550,26 @@ export async function setMainFile(projectId: string, fileId: string): Promise<vo
   }
   const project = mockDb.projects.find((p) => p.id === projectId);
   if (project) project.settings.mainFileId = fileId;
+}
+
+/** Sets which child file compiles when the open file is somewhere inside
+ * this folder but isn't itself a \documentclass file — see the schema
+ * field's own comment. `fileId` must be a direct child of `folderId`
+ * (enforced here rather than trusted from the caller, since this is a
+ * value silently substituted into a real compile). */
+export async function setFolderMainFile(folderId: string, fileId: string): Promise<void> {
+  if (isRealId(folderId)) {
+    await getDb();
+    const child = await ProjectFileModel.exists({ _id: fileId, parentId: folderId } as never);
+    if (!child) throw new Error("That file isn't directly inside this folder.");
+    await ProjectFileModel.updateOne({ _id: folderId }, { folderMainFileId: fileId });
+    return;
+  }
+  await delay(250);
+  const folder = mockDb.files.find((f) => f.id === folderId);
+  const child = mockDb.files.find((f) => f.id === fileId && f.parentId === folderId);
+  if (!folder || !child) throw new Error("That file isn't directly inside this folder.");
+  folder.folderMainFileId = fileId;
 }
 
 export interface UploadFileInput {

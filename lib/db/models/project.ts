@@ -79,6 +79,15 @@ const ProjectFileSchema = new Schema(
     name: { type: String, required: true },
     path: { type: String, required: true },
     isMain: { type: Boolean, default: false },
+    /** Only meaningful on a folder doc: which of its direct child files
+     * compiles when the currently-open file is inside this folder but isn't
+     * itself a standalone document (no \documentclass) — e.g. a section
+     * file being \input{}-ed. Lets a project that bundles several
+     * independent papers as folders (see runCompile in workspace-store.ts)
+     * have each folder remember its own entry point, set once via "Set as
+     * main file for this folder" rather than needing every open file to
+     * itself contain \documentclass. */
+    folderMainFileId: { type: Schema.Types.ObjectId, ref: "ProjectFile", default: null },
     isBinary: { type: Boolean, default: false },
     sizeBytes: { type: Number, default: 0 },
     mimeType: String,
