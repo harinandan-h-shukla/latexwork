@@ -5,6 +5,8 @@ import {
   detectLocalAgent,
   getLocalBuildStatus,
   localPdfUrl,
+  localSyncTexForward,
+  localSyncTexInverse,
   startLocalCompile,
   subscribeLocalBuildUpdates,
 } from "@/lib/local-compiler/local-compiler-client";
@@ -14,7 +16,13 @@ import type {
   LocalBuildStatusResponse,
   LocalCompileFileInput,
 } from "@/lib/local-compiler/types";
-import { cancelCloudCompile, getCloudCompileStatus, startCloudCompile } from "@/lib/cloud-compiler/actions";
+import {
+  cancelCloudCompile,
+  getCloudCompileStatus,
+  getCloudSyncTexForward,
+  getCloudSyncTexInverse,
+  startCloudCompile,
+} from "@/lib/cloud-compiler/actions";
 import type { CloudBuildStatus, CloudBuildStatusResponse } from "@/lib/cloud-compiler/types";
 
 const LOCAL_CAPABLE_COMPILERS = new Set<Compiler>(["pdflatex", "xelatex", "lualatex"]);
@@ -333,4 +341,39 @@ export async function cancelSmart(result: CompileResult): Promise<void> {
   } else {
     await stopCompile(result.id);
   }
+}
+
+/** Real SyncTeX only exists for a real local or real cloud compile — the
+ * mock renderer's `compile.synctex` array (a fabricated approximation) is
+ * the caller's fallback when this returns null, not something this
+ * function itself produces. */
+export async function synctexForward(
+  compile: CompileResult,
+  mainFile: string,
+  sourcePath: string,
+  line: number
+): Promise<{ page: number; x: number; y: number } | null> {
+  if (compile.source === "local") {
+    return localSyncTexForward(compile.projectId, mainFile, sourcePath, line);
+  }
+  if (compile.source === "cloud" && REAL_PROJECT_ID_RE.test(compile.projectId)) {
+    return getCloudSyncTexForward(compile.id, sourcePath, line);
+  }
+  return null;
+}
+
+export async function synctexInverse(
+  compile: CompileResult,
+  mainFile: string,
+  page: number,
+  x: number,
+  y: number
+): Promise<{ file: string; line: number } | null> {
+  if (compile.source === "local") {
+    return localSyncTexInverse(compile.projectId, mainFile, page, x, y);
+  }
+  if (compile.source === "cloud" && REAL_PROJECT_ID_RE.test(compile.projectId)) {
+    return getCloudSyncTexInverse(compile.id, page, x, y);
+  }
+  return null;
 }

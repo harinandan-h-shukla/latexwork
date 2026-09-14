@@ -229,6 +229,7 @@ export class BuildManager {
       "-interaction=nonstopmode",
       "-file-line-error",
       "-halt-on-error",
+      "-synctex=1",
       // Force a real rebuild instead of trusting latexmk's file-timestamp
       // dependency check. Without this, an edit-then-recompile can land in
       // the same filesystem timestamp tick as the previous run (or the

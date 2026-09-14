@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import express, { NextFunction, Request, Response } from "express";
 
 import { ServiceConfig } from "./config";
@@ -7,6 +8,7 @@ import { discoverCompilers, getCachedCompilers } from "./discovery";
 import { BuildManager } from "./buildManager";
 import { requireSharedSecret } from "./auth";
 import { isRateLimited } from "./rateLimit";
+import { synctexForward, synctexInverse } from "./synctex";
 
 const SERVICE_VERSION = "0.1.0";
 
@@ -85,6 +87,52 @@ export async function createServer(config: ServiceConfig): Promise<{ app: expres
     }
     const result = buildManager.cancelBuild(req.params.buildId, callerId);
     res.status(result.status).json(result.payload);
+  });
+
+  // SyncTeX — only works within the same short window a build's workDir
+  // still exists (see SUCCESS_CLEANUP_DELAY_MS in buildManager.ts), unlike
+  // local-agent where the project's directory is long-lived.
+  app.get("/synctex/forward/:buildId", async (req: Request, res: Response) => {
+    const callerId = callerFromQuery(req);
+    const record = buildManager.getBuild(req.params.buildId);
+    const file = typeof req.query.file === "string" ? req.query.file : undefined;
+    const line = Number(req.query.line);
+    if (!callerId || !record || record.callerId !== callerId || !record.pdfPath || !file || !Number.isFinite(line)) {
+      res.status(404).json({ error: "No SyncTeX data available for that build." });
+      return;
+    }
+    const pdfRelPath = path.relative(record.workDir, record.pdfPath);
+    const result = await synctexForward(record.workDir, pdfRelPath, file, line);
+    if (!result) {
+      res.status(404).json({ error: "No SyncTeX mapping for that location." });
+      return;
+    }
+    res.json(result);
+  });
+
+  app.get("/synctex/inverse/:buildId", async (req: Request, res: Response) => {
+    const callerId = callerFromQuery(req);
+    const record = buildManager.getBuild(req.params.buildId);
+    const page = Number(req.query.page);
+    const x = Number(req.query.x);
+    const y = Number(req.query.y);
+    if (
+      !callerId ||
+      !record ||
+      record.callerId !== callerId ||
+      !record.pdfPath ||
+      ![page, x, y].every(Number.isFinite)
+    ) {
+      res.status(404).json({ error: "No SyncTeX data available for that build." });
+      return;
+    }
+    const pdfRelPath = path.relative(record.workDir, record.pdfPath);
+    const result = await synctexInverse(record.workDir, pdfRelPath, page, x, y);
+    if (!result) {
+      res.status(404).json({ error: "No SyncTeX mapping for that location." });
+      return;
+    }
+    res.json(result);
   });
 
   app.get("/builds/:buildId/output.pdf", (req: Request, res: Response) => {

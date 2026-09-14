@@ -54,3 +54,15 @@ export interface LocalCompileRequest {
     clean?: boolean;
   };
 }
+
+export interface LocalSyncTexForward {
+  page: number;
+  /** Points (72dpi), top-left origin — synctex's own coordinate convention. */
+  x: number;
+  y: number;
+}
+
+export interface LocalSyncTexInverse {
+  file: string;
+  line: number;
+}

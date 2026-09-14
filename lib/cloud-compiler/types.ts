@@ -34,3 +34,14 @@ export interface CloudCompileRequest {
   draftMode?: boolean;
   shellEscape?: boolean;
 }
+
+export interface CloudSyncTexForward {
+  page: number;
+  x: number;
+  y: number;
+}
+
+export interface CloudSyncTexInverse {
+  file: string;
+  line: number;
+}

@@ -234,6 +234,7 @@ export class BuildManager {
         "-interaction=nonstopmode",
         "-file-line-error",
         "-halt-on-error",
+        "-synctex=1",
         // Fresh workDir every build already means there's no stale-cache
         // risk the way there is in local-agent, but -g costs nothing here
         // (nothing to skip on a first-ever run) and keeps behavior identical

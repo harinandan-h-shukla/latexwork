@@ -44,6 +44,11 @@ interface WorkspaceState {
   fileContents: Record<string, string>;
   dirtyFileIds: Set<string>;
   compile: CompileResult | null;
+  /** The mainFile path used for the current `compile` result — SyncTeX
+   * queries need this exact string (it's how the PDF's own synctex data
+   * addresses source files), so it's kept alongside the result rather than
+   * re-derived later from `files`, which can change after the compile ran. */
+  lastCompileMainFile: string | null;
   isCompiling: boolean;
   activeSidePanel: SidePanelId | null;
   setActiveSidePanel: (panel: SidePanelId | null) => void;
@@ -89,6 +94,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   fileContents: {},
   dirtyFileIds: new Set(),
   compile: null,
+  lastCompileMainFile: null,
   isCompiling: false,
   activeSidePanel: null,
   setActiveSidePanel: (panel) =>
@@ -135,6 +141,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       fileContents: {},
       dirtyFileIds: new Set(),
       compile: null,
+      lastCompileMainFile: null,
       isCompiling: false,
     });
     const files = await listFiles(projectId);
@@ -286,7 +293,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       );
 
       if (myRunId === compileRunId) {
-        set({ compile: result, isCompiling: false });
+        set({ compile: result, lastCompileMainFile: mainFilePath, isCompiling: false });
       }
     } catch (err) {
       // Without this, any uncaught failure in compileSmart (both the local

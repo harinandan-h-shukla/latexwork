@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { CompileLogEntry, SyncTexMapping } from "@/lib/types";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useLogFilterStore } from "@/components/compile/log-filter-store";
+import { synctexForward, synctexInverse } from "@/lib/local-compiler/compiler-service";
 
 interface PdfPreviewProps {
   pdfUrl: string | null;
@@ -262,23 +263,53 @@ export function PdfPreview({ pdfUrl, isCompiling }: PdfPreviewProps) {
 
   useEffect(() => {
     if (!syncTargetLine || !pdfDoc) return;
-    const matches = synctex.filter((m) => m.fileId === syncTargetLine.fileId);
-    if (matches.length === 0) return;
-    let nearest = matches[0];
-    let bestDist = Math.abs(matches[0].line - syncTargetLine.line);
-    for (const m of matches) {
-      const dist = Math.abs(m.line - syncTargetLine.line);
-      if (dist < bestDist) {
-        bestDist = dist;
-        nearest = m;
+    const target = syncTargetLine;
+    const doc = pdfDoc;
+    let cancelled = false;
+
+    async function resolveTarget(): Promise<{ page: number; y: number } | null> {
+      // Real SyncTeX for a real local/cloud compile — a live query against
+      // the actual .synctex.gz the compiler produced, not a fabricated
+      // approximation. Falls through to the mock's precomputed array (the
+      // only kind of "synctex" a mock/legacy-project compile has).
+      const { compile: currentCompile, lastCompileMainFile, files } = useWorkspaceStore.getState();
+      const sourcePath = files.find((f) => f.id === target.fileId)?.path.replace(/^\//, "");
+      if (currentCompile && lastCompileMainFile && sourcePath) {
+        const result = await synctexForward(currentCompile, lastCompileMainFile, sourcePath, target.line);
+        if (result) {
+          const page = await doc.getPage(result.page).catch(() => null);
+          if (page) {
+            const height = page.view[3] - page.view[1];
+            if (height > 0) return { page: result.page, y: Math.min(1, Math.max(0, result.y / height)) };
+          }
+        }
       }
+
+      const matches = synctex.filter((m) => m.fileId === target.fileId);
+      if (matches.length === 0) return null;
+      let nearest = matches[0];
+      let bestDist = Math.abs(matches[0].line - target.line);
+      for (const m of matches) {
+        const dist = Math.abs(m.line - target.line);
+        if (dist < bestDist) {
+          bestDist = dist;
+          nearest = m;
+        }
+      }
+      return { page: nearest.page, y: nearest.y };
     }
-    (() => {
-      if (!continuous && nearest.page !== currentPage) goToPage(nearest.page);
-      setSyncMarkerY(nearest.y);
-    })();
-    const timer = setTimeout(() => setSyncMarkerY(null), 2000);
-    return () => clearTimeout(timer);
+
+    resolveTarget().then((resolved) => {
+      if (cancelled || !resolved) return;
+      if (!continuous && resolved.page !== currentPage) goToPage(resolved.page);
+      setSyncMarkerY(resolved.y);
+      setTimeout(() => {
+        if (!cancelled) setSyncMarkerY(null);
+      }, 2000);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTargetLine, pdfDoc]);
 
@@ -384,10 +415,49 @@ export function PdfPreview({ pdfUrl, isCompiling }: PdfPreviewProps) {
     }
   }
 
-  function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>, pageNumber: number) {
+  async function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>, pageNumber: number) {
     const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
+    const xFraction = (e.clientX - rect.left) / rect.width;
     const yFraction = (e.clientY - rect.top) / rect.height;
+
+    async function jumpTo(fileId: string, line: number) {
+      const { openFile } = useWorkspaceStore.getState();
+      await openFile(fileId);
+      setTimeout(() => {
+        useWorkspaceStore.getState().editorHandle?.scrollToLine(line);
+      }, 60);
+    }
+
+    // Real inverse search for a real local/cloud compile.
+    if (pdfDoc) {
+      const { compile: currentCompile, lastCompileMainFile, files } = useWorkspaceStore.getState();
+      if (currentCompile && lastCompileMainFile) {
+        const page = await pdfDoc.getPage(pageNumber).catch(() => null);
+        if (page) {
+          const width = page.view[2] - page.view[0];
+          const height = page.view[3] - page.view[1];
+          if (width > 0 && height > 0) {
+            const result = await synctexInverse(
+              currentCompile,
+              lastCompileMainFile,
+              pageNumber,
+              xFraction * width,
+              yFraction * height
+            );
+            if (result) {
+              const normalizedPath = result.file.replace(/^\.?\//, "");
+              const match = files.find((f) => f.path.replace(/^\//, "") === normalizedPath);
+              if (match) {
+                await jumpTo(match.id, result.line);
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+
     const candidates = synctex.filter((m) => m.page === pageNumber);
     if (candidates.length === 0) {
       toast.info("No SyncTeX mapping for this spot");
@@ -402,12 +472,7 @@ export function PdfPreview({ pdfUrl, isCompiling }: PdfPreviewProps) {
         nearest = m;
       }
     }
-    const { openFile } = useWorkspaceStore.getState();
-    void openFile(nearest.fileId).then(() => {
-      setTimeout(() => {
-        useWorkspaceStore.getState().editorHandle?.scrollToLine(nearest.line);
-      }, 60);
-    });
+    await jumpTo(nearest.fileId, nearest.line);
   }
 
   function handleMarkerClick(entry: CompileLogEntry) {

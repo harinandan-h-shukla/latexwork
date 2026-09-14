@@ -9,6 +9,8 @@ import { AgentConfig } from "./config";
 import { discoverCompilers, getCachedCompilers } from "./discovery";
 import { BuildManager } from "./buildManager";
 import { WsHub } from "./wsHub";
+import { isSafeProjectId, isSafeRelativePath } from "./paths";
+import { synctexForward, synctexInverse } from "./synctex";
 
 function readAgentVersion(): string {
   try {
@@ -92,6 +94,61 @@ export async function createServer(config: AgentConfig): Promise<{ server: http.
     }
     res.setHeader("Content-Type", "application/pdf");
     fs.createReadStream(record.pdfPath).pipe(res);
+  });
+
+  // SyncTeX — reuses the project's persistent workDir (same directory the
+  // last compile wrote into), so this only works once a compile has
+  // actually produced a .synctex.gz there. mainFile is passed by the
+  // client rather than tracked server-side, since the agent doesn't keep
+  // per-project state beyond the workDir itself.
+  app.get("/synctex/forward/:projectId", async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+    const { file, line, mainFile } = req.query;
+    if (
+      !isSafeProjectId(projectId) ||
+      typeof file !== "string" ||
+      !isSafeRelativePath(file) ||
+      typeof mainFile !== "string" ||
+      !isSafeRelativePath(mainFile) ||
+      typeof line !== "string" ||
+      !Number.isFinite(Number(line))
+    ) {
+      res.status(400).json({ error: "file, line and mainFile are required." });
+      return;
+    }
+    const cwd = path.join(config.workDir, projectId);
+    const pdfRelPath = `.build/${path.basename(mainFile, path.extname(mainFile))}.pdf`;
+    const result = await synctexForward(cwd, pdfRelPath, file, Number(line));
+    if (!result) {
+      res.status(404).json({ error: "No SyncTeX mapping for that location." });
+      return;
+    }
+    res.json(result);
+  });
+
+  app.get("/synctex/inverse/:projectId", async (req: Request, res: Response) => {
+    const { projectId } = req.params;
+    const { page, x, y, mainFile } = req.query;
+    if (
+      !isSafeProjectId(projectId) ||
+      typeof mainFile !== "string" ||
+      !isSafeRelativePath(mainFile) ||
+      typeof page !== "string" ||
+      typeof x !== "string" ||
+      typeof y !== "string" ||
+      ![page, x, y].every((v) => Number.isFinite(Number(v)))
+    ) {
+      res.status(400).json({ error: "page, x, y and mainFile are required." });
+      return;
+    }
+    const cwd = path.join(config.workDir, projectId);
+    const pdfRelPath = `.build/${path.basename(mainFile, path.extname(mainFile))}.pdf`;
+    const result = await synctexInverse(cwd, pdfRelPath, Number(page), Number(x), Number(y));
+    if (!result) {
+      res.status(404).json({ error: "No SyncTeX mapping for that location." });
+      return;
+    }
+    res.json(result);
   });
 
   app.delete("/project/:projectId", (req: Request, res: Response) => {

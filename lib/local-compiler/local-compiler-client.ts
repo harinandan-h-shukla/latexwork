@@ -2,6 +2,8 @@ import type {
   LocalAgentInfo,
   LocalBuildStatusResponse,
   LocalCompileRequest,
+  LocalSyncTexForward,
+  LocalSyncTexInverse,
 } from "@/lib/local-compiler/types";
 
 export const DEFAULT_LOCAL_AGENT_PORT = 47823;
@@ -89,6 +91,43 @@ export async function closeLocalProject(projectId: string): Promise<void> {
 
 export function localPdfUrl(pdfUrl: string): string {
   return `${baseUrl()}${pdfUrl}`;
+}
+
+export async function localSyncTexForward(
+  projectId: string,
+  mainFile: string,
+  file: string,
+  line: number
+): Promise<LocalSyncTexForward | null> {
+  const params = new URLSearchParams({ file, line: String(line), mainFile });
+  try {
+    return await fetchJson<LocalSyncTexForward>(
+      `/synctex/forward/${encodeURIComponent(projectId)}?${params}`,
+      { method: "GET" },
+      4000
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function localSyncTexInverse(
+  projectId: string,
+  mainFile: string,
+  page: number,
+  x: number,
+  y: number
+): Promise<LocalSyncTexInverse | null> {
+  const params = new URLSearchParams({ page: String(page), x: String(x), y: String(y), mainFile });
+  try {
+    return await fetchJson<LocalSyncTexInverse>(
+      `/synctex/inverse/${encodeURIComponent(projectId)}?${params}`,
+      { method: "GET" },
+      4000
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function subscribeLocalBuildUpdates(

@@ -10,7 +10,12 @@
 import { getDb } from "@/lib/db/mongoose";
 import { ProjectModel, CollaboratorModel } from "@/lib/db/models/project";
 import { requireUserId } from "@/lib/db/require-user";
-import type { CloudBuildStatusResponse, CloudCompileRequest } from "@/lib/cloud-compiler/types";
+import type {
+  CloudBuildStatusResponse,
+  CloudCompileRequest,
+  CloudSyncTexForward,
+  CloudSyncTexInverse,
+} from "@/lib/cloud-compiler/types";
 
 const SUPPORTED_ENGINES = new Set(["pdflatex", "xelatex", "lualatex"]);
 
@@ -73,6 +78,39 @@ export async function getCloudCompileStatus(buildId: string): Promise<CloudBuild
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error ?? `Cloud status request failed (${res.status}).`);
   return body as CloudBuildStatusResponse;
+}
+
+export async function getCloudSyncTexForward(
+  buildId: string,
+  file: string,
+  line: number
+): Promise<CloudSyncTexForward | null> {
+  const userId = await requireUserId();
+  const { url, secret } = cloudCompilerEndpoint();
+  const params = new URLSearchParams({ callerId: userId, file, line: String(line) });
+  const res = await fetch(`${url}/synctex/forward/${encodeURIComponent(buildId)}?${params}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as CloudSyncTexForward;
+}
+
+export async function getCloudSyncTexInverse(
+  buildId: string,
+  page: number,
+  x: number,
+  y: number
+): Promise<CloudSyncTexInverse | null> {
+  const userId = await requireUserId();
+  const { url, secret } = cloudCompilerEndpoint();
+  const params = new URLSearchParams({ callerId: userId, page: String(page), x: String(x), y: String(y) });
+  const res = await fetch(`${url}/synctex/inverse/${encodeURIComponent(buildId)}?${params}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as CloudSyncTexInverse;
 }
 
 export async function cancelCloudCompile(buildId: string): Promise<void> {
