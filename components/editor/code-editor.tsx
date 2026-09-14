@@ -125,10 +125,32 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     if (!view) return;
     const current = view.state.doc.toString();
     if (current !== value) {
-      view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+      // `value` can now change out from under an already-mounted, already-
+      // active file: workspace-store's openFile optimistically paints a
+      // locally cached copy of a file's content instantly, then replaces it
+      // with the real getFileContent() result once that resolves — same
+      // fileId throughout, so the mount effect above (keyed only on
+      // fileId) never re-runs to pick it up. Without also depending on
+      // `value` here, that real/authoritative content would land in the
+      // store but never actually reach the screen. This never fires for
+      // the user's own keystrokes (onChange already applied those directly
+      // to this same view, so `current` already equals `value` by the time
+      // this runs) — only for an external content replacement like the one
+      // above, or the equivalent very first sync on a fresh mount.
+      view.dispatch({
+        changes: { from: 0, to: current.length, insert: value },
+        // Best-effort: keep the cursor near where it was rather than
+        // snapping to the document start. There's no meaningful mapping
+        // between old and new content here (they can differ arbitrarily),
+        // so this is just "stay at roughly the same offset, clamped to the
+        // new length" — good enough for the narrow, sub-second window this
+        // covers, not a real diff/merge.
+        selection: {
+          anchor: Math.min(view.state.selection.main.anchor, value.length),
+        },
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId]);
+  }, [fileId, value]);
 
   return <div ref={hostRef} className="h-full min-h-0 overflow-auto text-sm [&_.cm-editor]:h-full" />;
 });

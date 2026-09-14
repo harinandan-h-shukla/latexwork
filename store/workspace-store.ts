@@ -20,6 +20,7 @@ import {
 } from "@/lib/mock-api";
 import { cancelSmart, compileSmart, detectLocal, resolveCompileSource } from "@/lib/local-compiler/compiler-service";
 import type { LocalCompileFileInput } from "@/lib/local-compiler/types";
+import { getCachedFileContent, setCachedFileContent } from "@/lib/local-cache/file-content-cache";
 
 export type SidePanelId =
   | "outline"
@@ -178,29 +179,107 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   },
 
   openFile: async (fileId) => {
-    const { openFileIds, fileContents } = get();
+    const { openFileIds, fileContents, projectId } = get();
     if (!openFileIds.includes(fileId)) {
       set({ openFileIds: [...openFileIds, fileId] });
     }
-    if (fileContents[fileId] === undefined) {
+
+    if (fileContents[fileId] !== undefined) {
+      // Already loaded into this session's in-memory cache (which itself
+      // stays populated across tab switches until loadProject resets it on
+      // a project change) — nothing to fetch, just switch to it.
+      set({ activeFileId: fileId });
+      return;
+    }
+
+    // Not in the in-memory session cache — either never opened this
+    // session, or the page was reloaded/reopened. Before doing the real,
+    // authoritative fetch, check the persistent cross-session cache
+    // (lib/local-cache/file-content-cache.ts, IndexedDB-backed) for what
+    // this file looked like the last time it was seen on this device. This
+    // exists ONLY to paint something instantly instead of a blank editor
+    // for the length of a network round-trip — it is never a substitute for
+    // the real fetch, which always still runs below and always wins once it
+    // resolves, with one deliberate exception: see the dirtyFileIds check
+    // after the fetch, which protects in-progress keystrokes.
+    let shownOptimistically = false;
+    if (projectId) {
       try {
-        const content = await getFileContent(fileId);
+        const cached = await getCachedFileContent(projectId, fileId);
+        // Re-check after the await: openFile can be called again for the
+        // same fileId (e.g. rapid tab clicks) while this lookup was
+        // in flight, and a previous call's own fetch may have already
+        // populated the real content — never stomp that with a stale read.
+        if (cached !== null && get().fileContents[fileId] === undefined) {
+          set((state) => ({ fileContents: { ...state.fileContents, [fileId]: cached } }));
+          shownOptimistically = true;
+        }
+      } catch {
+        // Cache is best-effort; any failure here just means no instant
+        // preview this time, not a broken file open.
+      }
+    }
+    if (shownOptimistically) {
+      // Switch tabs right away so the (unconfirmed, possibly stale) cached
+      // content is visible immediately. If there was no cache hit, fall
+      // through unchanged to the pre-existing blocking-await behavior below
+      // — there's nothing to show early for a file never seen on this
+      // device, so there's no regression for that case.
+      set({ activeFileId: fileId });
+    }
+
+    try {
+      const content = await getFileContent(fileId);
+      // Race: the user may have already started typing over the
+      // optimistic/stale placeholder while this real fetch was in flight —
+      // setFileContent (called on every editor keystroke) marks the file
+      // dirty. This codebase has no real-time collab sync to merge against
+      // yet (see lib/mock-api/collaboration.ts: no live writer exists for
+      // that collection), so there is no principled way to reconcile "what
+      // the user just typed" with "what the server had" here. The only safe
+      // choice is to never let this "authoritative" fetch clobber
+      // in-progress edits — leave fileContents[fileId] alone and let the
+      // normal debounced saveFileContent flow (editor-workspace.tsx) persist
+      // what the user actually typed. Silently overwriting keystrokes with
+      // stale-relative-to-edit server content is exactly the class of bug
+      // this feature must not reintroduce (see saveFileContent's own
+      // accidental-wipe guard above for the same underlying concern).
+      if (!get().dirtyFileIds.has(fileId)) {
         set((state) => ({ fileContents: { ...state.fileContents, [fileId]: content } }));
-      } catch (err) {
-        // Leave fileContents[fileId] unset rather than showing a
-        // deceptively blank editor for a file that actually has real
-        // (but currently unreadable) content — see getFileContent's
-        // decrypt-failure handling.
+      }
+      if (projectId) void setCachedFileContent(projectId, fileId, content);
+      set({ activeFileId: fileId });
+    } catch (err) {
+      if (get().dirtyFileIds.has(fileId)) {
+        // The user already started editing the optimistic placeholder
+        // before the real fetch failed. Do NOT blank out their own
+        // keystrokes — but they should know what's on screen was never
+        // actually confirmed against the server.
         toast.error(
-          err instanceof Error && err.message
-            ? err.message
-            : "Couldn't load this file's content."
+          "Couldn't confirm this file's latest content with the server — you're editing a locally cached copy."
         );
         set({ activeFileId: fileId });
         return;
       }
+      // No edits in flight, so there's nothing worth protecting on screen.
+      // Fall back to the pre-existing behavior of never leaving content
+      // that couldn't be verified against the server sitting in
+      // fileContents looking confirmed when it isn't — same reasoning as
+      // the decrypt-failure handling this mirrors.
+      if (shownOptimistically) {
+        set((state) => {
+          const next = { ...state.fileContents };
+          delete next[fileId];
+          return { fileContents: next };
+        });
+      }
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't load this file's content."
+      );
+      set({ activeFileId: fileId });
     }
-    set({ activeFileId: fileId });
   },
 
   closeFile: (fileId) => {
