@@ -24,6 +24,18 @@ import { getDb } from "@/lib/db/mongoose";
 import { ProjectModel, CollaboratorModel } from "@/lib/db/models/project";
 import { UserModel } from "@/lib/db/models/user";
 import { toUser } from "@/lib/db/user-mapper";
+import { requireUserId } from "@/lib/db/require-user";
+import {
+  CommentModel,
+  TrackedChangeModel,
+  ChatMessageModel,
+  PresenceModel,
+  type CommentDoc,
+  type TrackedChangeDoc,
+  type ChatMessageDoc,
+  type PresenceDoc,
+} from "@/lib/db/models/collaboration";
+import type { HydratedDocument, Types } from "mongoose";
 
 // Same real-vs-legacy-mock id split used throughout lib/mock-api/*.ts (a
 // mock id is never a 24-char hex string, a real Mongo id always is).
@@ -35,6 +47,80 @@ function isRealId(value: string): boolean {
 /** Total people who can work on one project, owner included — the cap the
  * user asked for ("max 10 person can work"). */
 const MAX_COLLABORATORS_PER_PROJECT = 10;
+
+// ---------------------------------------------------------------------------
+// Real-Mongo → shared-type mappers, mirroring the toUser() pattern already
+// used elsewhere — ObjectId fields go through String(), Date fields go
+// through .toISOString(), so every real branch below returns exactly the
+// same shape the mock branch already returns.
+// ---------------------------------------------------------------------------
+
+function toComment(doc: HydratedDocument<CommentDoc>): Comment {
+  const obj = doc.toObject({ getters: true });
+  return {
+    id: String(obj._id),
+    projectId: String(obj.projectId),
+    fileId: String(obj.fileId),
+    authorId: String(obj.authorId),
+    anchorFrom: obj.anchorFrom,
+    anchorTo: obj.anchorTo,
+    quotedText: obj.quotedText,
+    text: obj.text,
+    createdAt: (obj.createdAt as Date).toISOString(),
+    resolved: obj.resolved ?? false,
+    resolvedBy: obj.resolvedBy ? String(obj.resolvedBy) : undefined,
+    resolvedAt: obj.resolvedAt ? (obj.resolvedAt as Date).toISOString() : undefined,
+    replies: (obj.replies ?? []).map((r) => ({
+      id: String((r as { _id: Types.ObjectId })._id),
+      commentId: String(obj._id),
+      authorId: String(r.authorId),
+      text: r.text,
+      createdAt: (r.createdAt as Date).toISOString(),
+      mentions: (r.mentions ?? []).map(String),
+    })),
+    mentions: (obj.mentions ?? []).map(String),
+  };
+}
+
+function toTrackedChange(doc: HydratedDocument<TrackedChangeDoc>): TrackedChange {
+  const obj = doc.toObject({ getters: true });
+  return {
+    id: String(obj._id),
+    projectId: String(obj.projectId),
+    fileId: String(obj.fileId),
+    authorId: String(obj.authorId),
+    type: obj.type as TrackedChange["type"],
+    from: obj.from,
+    to: obj.to,
+    text: obj.text,
+    status: (obj.status ?? "pending") as TrackedChange["status"],
+    createdAt: (obj.createdAt as Date).toISOString(),
+  };
+}
+
+function toChatMessage(doc: HydratedDocument<ChatMessageDoc>): ChatMessage {
+  const obj = doc.toObject({ getters: true });
+  return {
+    id: String(obj._id),
+    projectId: String(obj.projectId),
+    authorId: String(obj.authorId),
+    text: obj.text,
+    createdAt: (obj.createdAt as Date).toISOString(),
+    mentions: (obj.mentions ?? []).map(String),
+  };
+}
+
+function toPresence(doc: HydratedDocument<PresenceDoc>): PresenceInfo {
+  const obj = doc.toObject({ getters: true });
+  return {
+    userId: String(obj.userId),
+    projectId: String(obj.projectId),
+    fileId: obj.fileId ? String(obj.fileId) : null,
+    cursorLine: obj.cursorLine ?? null,
+    color: obj.color,
+    lastActiveAt: (obj.lastActiveAt as Date).toISOString(),
+  };
+}
 
 // Seeding (comments/track-changes/chat/presence) is reserved for this one
 // demo project. It used to run for ANY project id passed in — meaning
@@ -86,6 +172,20 @@ function demoAuthors(projectId: string): string[] {
 // ---------------------------------------------------------------------------
 
 export async function listPresence(projectId: string): Promise<PresenceInfo[]> {
+  if (isRealId(projectId)) {
+    await getDb();
+    // No real writer exists yet for this collection (no WebSocket/heartbeat
+    // path — see the note on PresenceModel in lib/db/models/collaboration.ts,
+    // real-time presence belongs in Redis/an ephemeral store in a real
+    // deploy, this model exists mainly for schema completeness). Query it
+    // honestly anyway: a recent row (last 2 minutes) is "present", anything
+    // older is stale. Until something actually writes rows here this will
+    // simply and correctly return [] for every real project.
+    const recentCutoff = new Date(Date.now() - 2 * 60_000);
+    const rows = await PresenceModel.find({ projectId, lastActiveAt: { $gte: recentCutoff } });
+    return rows.map(toPresence);
+  }
+
   seedMockDb();
   await delay(150);
   if (projectId !== RICH_DEMO_PROJECT_ID) return []; // no one is actually here — don't fake it
@@ -168,6 +268,12 @@ function seedComments(projectId: string): void {
 }
 
 export async function listComments(projectId: string): Promise<Comment[]> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const rows = await CommentModel.find({ projectId }).sort({ createdAt: 1 });
+    return rows.map(toComment);
+  }
+
   seedMockDb();
   seedComments(projectId);
   await delay(20);
@@ -181,6 +287,22 @@ export async function createComment(
   fileId: string,
   input: { anchorFrom: number; anchorTo: number; quotedText: string; text: string; mentions: string[] }
 ): Promise<Comment> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const authorId = await requireUserId();
+    const created = await CommentModel.create({
+      projectId,
+      fileId,
+      authorId,
+      anchorFrom: input.anchorFrom,
+      anchorTo: input.anchorTo,
+      quotedText: input.quotedText,
+      text: input.text,
+      mentions: input.mentions,
+    } as never);
+    return toComment(created);
+  }
+
   seedMockDb();
   await delay(350);
   const comment: Comment = {
@@ -206,6 +328,27 @@ export async function replyToComment(
   text: string,
   mentions: string[]
 ): Promise<CommentReply> {
+  if (isRealId(commentId)) {
+    await getDb();
+    const authorId = await requireUserId();
+    const comment = await CommentModel.findById(commentId);
+    if (!comment) throw new Error("Comment not found");
+    comment.replies.push({ authorId, text, mentions } as never);
+    await comment.save();
+    const reply = comment.replies[comment.replies.length - 1] as HydratedDocument<CommentDoc>["replies"][number] & {
+      _id: Types.ObjectId;
+      createdAt: Date;
+    };
+    return {
+      id: String(reply._id),
+      commentId: String(comment._id),
+      authorId: String(reply.authorId),
+      text: reply.text,
+      createdAt: reply.createdAt.toISOString(),
+      mentions: (reply.mentions ?? []).map(String),
+    };
+  }
+
   await delay(300);
   const comment = mockDb.comments.find((c) => c.id === commentId);
   if (!comment) throw new Error("Comment not found");
@@ -222,6 +365,13 @@ export async function replyToComment(
 }
 
 export async function resolveComment(commentId: string): Promise<void> {
+  if (isRealId(commentId)) {
+    await getDb();
+    const resolvedBy = await requireUserId();
+    await CommentModel.updateOne({ _id: commentId }, { resolved: true, resolvedBy, resolvedAt: new Date() });
+    return;
+  }
+
   await delay(200);
   const comment = mockDb.comments.find((c) => c.id === commentId);
   if (!comment) return;
@@ -231,6 +381,15 @@ export async function resolveComment(commentId: string): Promise<void> {
 }
 
 export async function reopenComment(commentId: string): Promise<void> {
+  if (isRealId(commentId)) {
+    await getDb();
+    await CommentModel.updateOne(
+      { _id: commentId },
+      { resolved: false, $unset: { resolvedBy: 1, resolvedAt: 1 } }
+    );
+    return;
+  }
+
   await delay(200);
   const comment = mockDb.comments.find((c) => c.id === commentId);
   if (!comment) return;
@@ -310,6 +469,12 @@ function seedTrackedChanges(projectId: string): void {
 }
 
 export async function listTrackedChanges(projectId: string): Promise<TrackedChange[]> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const rows = await TrackedChangeModel.find({ projectId }).sort({ createdAt: 1 });
+    return rows.map(toTrackedChange);
+  }
+
   seedMockDb();
   seedTrackedChanges(projectId);
   await delay(250);
@@ -319,18 +484,33 @@ export async function listTrackedChanges(projectId: string): Promise<TrackedChan
 }
 
 export async function acceptChange(changeId: string): Promise<void> {
+  if (isRealId(changeId)) {
+    await getDb();
+    await TrackedChangeModel.updateOne({ _id: changeId }, { status: "accepted" });
+    return;
+  }
   await delay(200);
   const change = mockDb.trackedChanges.find((c) => c.id === changeId);
   if (change) change.status = "accepted";
 }
 
 export async function rejectChange(changeId: string): Promise<void> {
+  if (isRealId(changeId)) {
+    await getDb();
+    await TrackedChangeModel.updateOne({ _id: changeId }, { status: "rejected" });
+    return;
+  }
   await delay(200);
   const change = mockDb.trackedChanges.find((c) => c.id === changeId);
   if (change) change.status = "rejected";
 }
 
 export async function acceptAllByUser(projectId: string, userId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await TrackedChangeModel.updateMany({ projectId, authorId: userId, status: "pending" }, { status: "accepted" });
+    return;
+  }
   await delay(300);
   for (const c of mockDb.trackedChanges) {
     if (c.projectId === projectId && c.authorId === userId && c.status === "pending") {
@@ -340,6 +520,11 @@ export async function acceptAllByUser(projectId: string, userId: string): Promis
 }
 
 export async function rejectAllByUser(projectId: string, userId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await TrackedChangeModel.updateMany({ projectId, authorId: userId, status: "pending" }, { status: "rejected" });
+    return;
+  }
   await delay(300);
   for (const c of mockDb.trackedChanges) {
     if (c.projectId === projectId && c.authorId === userId && c.status === "pending") {
@@ -349,6 +534,11 @@ export async function rejectAllByUser(projectId: string, userId: string): Promis
 }
 
 export async function acceptAllChanges(projectId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await TrackedChangeModel.updateMany({ projectId, status: "pending" }, { status: "accepted" });
+    return;
+  }
   await delay(300);
   for (const c of mockDb.trackedChanges) {
     if (c.projectId === projectId && c.status === "pending") c.status = "accepted";
@@ -356,6 +546,11 @@ export async function acceptAllChanges(projectId: string): Promise<void> {
 }
 
 export async function rejectAllChanges(projectId: string): Promise<void> {
+  if (isRealId(projectId)) {
+    await getDb();
+    await TrackedChangeModel.updateMany({ projectId, status: "pending" }, { status: "rejected" });
+    return;
+  }
   await delay(300);
   for (const c of mockDb.trackedChanges) {
     if (c.projectId === projectId && c.status === "pending") c.status = "rejected";
@@ -398,6 +593,12 @@ function seedChat(projectId: string): void {
 }
 
 export async function listChatMessages(projectId: string): Promise<ChatMessage[]> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const rows = await ChatMessageModel.find({ projectId }).sort({ createdAt: 1 });
+    return rows.map(toChatMessage);
+  }
+
   seedMockDb();
   seedChat(projectId);
   await delay(20);
@@ -411,6 +612,13 @@ export async function sendChatMessage(
   text: string,
   mentions: string[]
 ): Promise<ChatMessage> {
+  if (isRealId(projectId)) {
+    await getDb();
+    const authorId = await requireUserId();
+    const created = await ChatMessageModel.create({ projectId, authorId, text, mentions } as never);
+    return toChatMessage(created);
+  }
+
   await delay(300);
   const message: ChatMessage = {
     id: id("chat"),
