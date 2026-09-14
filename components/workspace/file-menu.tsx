@@ -21,6 +21,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { downloadFile } from "@/lib/mock-api/files";
+import { exportProject } from "@/lib/mock-api/export";
+import { triggerDownload } from "@/lib/download-utils";
 
 function triggerTextDownload(filename: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -35,10 +37,12 @@ function triggerTextDownload(filename: string, content: string) {
 }
 
 export function FileMenu() {
+  const projectId = useWorkspaceStore((s) => s.projectId);
   const activeFileId = useWorkspaceStore((s) => s.activeFileId);
   const files = useWorkspaceStore((s) => s.files);
   const fileContents = useWorkspaceStore((s) => s.fileContents);
   const dirtyFileIds = useWorkspaceStore((s) => s.dirtyFileIds);
+  const compile = useWorkspaceStore((s) => s.compile);
   const saveFileContent = useWorkspaceStore((s) => s.saveFileContent);
   const setFileContent = useWorkspaceStore((s) => s.setFileContent);
   const createFileNode = useWorkspaceStore((s) => s.createFileNode);
@@ -47,6 +51,7 @@ export function FileMenu() {
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingLocalCopy, setSavingLocalCopy] = useState(false);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isDirty = activeFileId ? dirtyFileIds.has(activeFileId) : false;
@@ -93,6 +98,41 @@ export function FileMenu() {
     toast.success(`Downloading ${filename}`);
   }
 
+  // A local copy independent of any cloud-hosted copy — the "download
+  // everything for privacy" action. Two separate downloads (source zip +
+  // the actual compiled PDF, not a re-rendered approximation) rather than
+  // merging into one file, to reuse the existing, already-correct exporters
+  // as-is instead of re-implementing zip assembly around a fetched PDF blob.
+  // Note: uploaded images/figures aren't included — this app doesn't
+  // actually store binary file bytes anywhere yet (a separate, larger gap;
+  // see the project's own notes on object storage), only text source files.
+  async function handleDownloadLocalCopy() {
+    if (!projectId) return;
+    setSavingLocalCopy(true);
+    try {
+      const { filename, content, encoding } = await exportProject(projectId, "zip");
+      triggerDownload(filename, content, "application/zip", encoding);
+
+      if (compile?.pdfUrl) {
+        const res = await fetch(compile.pdfUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "compiled.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+      }
+      toast.success("Downloading source and PDF");
+    } finally {
+      setSavingLocalCopy(false);
+    }
+  }
+
   return (
     <>
       <DropdownMenu>
@@ -114,6 +154,13 @@ export function FileMenu() {
           <DropdownMenuItem onClick={handleDownload} disabled={!activeFileId}>
             <DownloadIcon />
             Download
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => void handleDownloadLocalCopy()}
+            disabled={!projectId || savingLocalCopy}
+          >
+            <DownloadIcon />
+            Download source + PDF
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
