@@ -9,6 +9,7 @@ import { LinkedAccountsList } from "@/components/settings/linked-accounts-list";
 import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form";
 import { PasswordForm } from "@/components/settings/password-form";
 import { TwoFactorPanel } from "@/components/settings/two-factor-panel";
+import { OpenSourcePanel } from "@/components/settings/open-source-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCurrentUser } from "@/lib/mock-api/auth";
 import type { User } from "@/lib/types";
@@ -46,6 +47,7 @@ export default function SettingsPage() {
       <LocalCompilerPanel user={user} onUserChange={setUser} />
       <CompileOptionsPanel />
       <NotificationPrefsForm user={user} onUserChange={setUser} />
+      <OpenSourcePanel />
     </div>
   );
 }

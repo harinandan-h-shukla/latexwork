@@ -67,6 +67,16 @@ const COLUMNS: FooterColumn[] = [
     title: "Legal",
     links: [{ label: "Privacy" }, { label: "Terms" }, { label: "Security" }],
   },
+  {
+    // AGPL-3.0 §13: anyone interacting with this program over a network
+    // must be offered a way to get its source — this is that, not a
+    // marketing choice.
+    title: "Open source",
+    links: [
+      { label: "Source code", href: "https://github.com/harinandan-h-shukla/latexwork" },
+      { label: "License (AGPL-3.0)", href: "https://github.com/harinandan-h-shukla/latexwork/blob/main/LICENSE" },
+    ],
+  },
 ];
 
 export function SiteFooter() {
@@ -111,7 +121,14 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/80 pt-6 sm:flex-row">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Inkwell. All rights reserved.
+            © {new Date().getFullYear()} Inkwell. Free and{" "}
+            <Link
+              href="https://github.com/harinandan-h-shukla/latexwork/blob/main/LICENSE"
+              className="underline hover:text-foreground"
+            >
+              open source (AGPL-3.0)
+            </Link>
+            .
           </p>
           <ThemeToggle />
         </div>
