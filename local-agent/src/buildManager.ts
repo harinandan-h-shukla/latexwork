@@ -226,9 +226,16 @@ export class BuildManager {
 
     const args = [
       ENGINE_FLAG[validated.compiler],
+      // -interaction=nonstopmode alone (no -halt-on-error) matches how
+      // Overleaf and most real LaTeX workflows behave: pdflatex logs an
+      // error (e.g. a missing \includegraphics file) and keeps going
+      // instead of aborting the whole compile on the first one — you still
+      // get a PDF to look at, just with a gap where that one thing failed,
+      // with the actual error still visible in the log below. -halt-on-error
+      // turned every single recoverable error into "no PDF at all," which
+      // is a much harsher failure mode than the error itself warranted.
       "-interaction=nonstopmode",
       "-file-line-error",
-      "-halt-on-error",
       "-synctex=1",
       // Force a real rebuild instead of trusting latexmk's file-timestamp
       // dependency check. Without this, an edit-then-recompile can land in

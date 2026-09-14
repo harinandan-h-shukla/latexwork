@@ -2,7 +2,15 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { CheckIcon, Loader2Icon, PlayIcon, RotateCcwIcon, SettingsIcon, SquareIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  Loader2Icon,
+  PlayIcon,
+  RotateCcwIcon,
+  SettingsIcon,
+  SquareIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +86,7 @@ export function CompileToolbar() {
   const runCompile = useWorkspaceStore((s) => s.runCompile);
   const cancelCompile = useWorkspaceStore((s) => s.cancelCompile);
   const setCitationPickerOpen = useWorkspaceStore((s) => s.setCitationPickerOpen);
+  const setActiveSidePanel = useWorkspaceStore((s) => s.setActiveSidePanel);
 
   const compiler = useUiStore((s) => s.compileCompiler);
   const draftMode = useUiStore((s) => s.compileDraftMode);
@@ -189,12 +198,33 @@ export function CompileToolbar() {
               Compiling{compile?.etaSeconds ? ` · ~${compile.etaSeconds}s` : ""}
             </Badge>
           )}
-          {status === "success" && (
-            <Badge className="gap-1 border-transparent bg-gradient-build text-white">
-              <CheckIcon className="size-3" />
-              Compiled{compile?.durationMs != null ? ` · ${compile.durationMs}ms` : ""}
-            </Badge>
-          )}
+          {status === "success" && (() => {
+            // A PDF existing no longer means the compile was clean — without
+            // -halt-on-error, latexmk keeps going past a recoverable error
+            // (a missing figure, say) and still produces a PDF. A flat green
+            // "Compiled" badge would hide that there's something to look at,
+            // so this counts real errors in the log and switches to an
+            // amber "check the log" state when there are any, same as
+            // Overleaf surfaces an error count even when a preview exists.
+            const errorCount = compile?.log.filter((l) => l.severity === "error").length ?? 0;
+            if (errorCount > 0) {
+              return (
+                <Badge
+                  className="gap-1 cursor-pointer border-transparent bg-gradient-warning text-white"
+                  onClick={() => setActiveSidePanel("log")}
+                >
+                  <AlertTriangleIcon className="size-3" />
+                  Compiled · {errorCount} error{errorCount === 1 ? "" : "s"}
+                </Badge>
+              );
+            }
+            return (
+              <Badge className="gap-1 border-transparent bg-gradient-build text-white">
+                <CheckIcon className="size-3" />
+                Compiled{compile?.durationMs != null ? ` · ${compile.durationMs}ms` : ""}
+              </Badge>
+            );
+          })()}
           {status === "error" && <Badge variant="destructive">Error</Badge>}
           {status === "timeout" && <Badge variant="destructive">Timed out</Badge>}
           {status === "stopped" && <Badge variant="outline">Stopped</Badge>}

@@ -231,9 +231,12 @@ export class BuildManager {
 
       const latexmkArgs = [
         ENGINE_FLAG[validated.compiler],
+        // See local-agent's identical change for the reasoning: no
+        // -halt-on-error means a recoverable error (e.g. a missing figure)
+        // logs and continues instead of aborting the whole compile —
+        // matches how Overleaf behaves, still produces a PDF to look at.
         "-interaction=nonstopmode",
         "-file-line-error",
-        "-halt-on-error",
         "-synctex=1",
         // Fresh workDir every build already means there's no stale-cache
         // risk the way there is in local-agent, but -g costs nothing here
