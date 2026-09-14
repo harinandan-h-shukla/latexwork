@@ -15,6 +15,7 @@ import { useEditorToolsState } from "@/components/editor/use-editor-tools-state"
 import { SelectionToolbar } from "@/components/latex/selection-toolbar";
 import { CitationPickerDialog } from "@/components/latex/citation-picker-dialog";
 import { CompileToolbar } from "@/components/compile/compile-toolbar";
+import { CompilerChoiceDialog } from "@/components/compile/compiler-choice-dialog";
 import { PdfPreview } from "@/components/pdf/pdf-preview";
 import { SidePanelRail } from "@/components/workspace/side-panel-rail";
 import { SidePanelHost } from "@/components/workspace/side-panel-host";
@@ -117,6 +118,7 @@ export function EditorWorkspace({ projectId }: { projectId: string }) {
       </div>
       {!focusMode && <SidePanelHost projectId={projectId} />}
       {!focusMode && <SidePanelRail />}
+      <CompilerChoiceDialog />
     </div>
   );
 

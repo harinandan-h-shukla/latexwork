@@ -49,9 +49,16 @@ export async function detectLocal(force = false): Promise<LocalAgentInfo | null>
 export function resolveCompileSource(
   preference: CompilerPreference | undefined,
   agentInfo: LocalAgentInfo | null,
-  compiler: Compiler
+  compiler: Compiler,
+  // Only consulted for "ask-each-time" — the per-project-open pick made via
+  // CompilerChoiceDialog, held in workspace-store (not persisted to the
+  // account, unlike the other two preferences). Before this existed,
+  // "ask-each-time" was accepted by the schema/type but never actually
+  // asked anything — it silently behaved exactly like "prefer-local".
+  sessionChoice?: "local" | "cloud" | null
 ): "local" | "cloud" {
   if (preference === "always-cloud") return "cloud";
+  if (preference === "ask-each-time" && sessionChoice === "cloud") return "cloud";
   if (!LOCAL_CAPABLE_COMPILERS.has(compiler)) return "cloud";
   if (!agentInfo) return "cloud";
   const match = agentInfo.compilers.find((c) => c.name === compiler);

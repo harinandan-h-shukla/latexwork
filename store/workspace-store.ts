@@ -63,6 +63,13 @@ interface WorkspaceState {
    * re-derived later from `files`, which can change after the compile ran. */
   lastCompileMainFile: string | null;
   isCompiling: boolean;
+  /** Per-project-open pick from CompilerChoiceDialog when the account's
+   * compilerPreference is "ask-each-time" — deliberately session-only, not
+   * persisted to the account (that's the point of "ask each time" as
+   * opposed to "prefer-local"/"always-cloud", which are permanent). Reset
+   * on every loadProject so a new project asks again. */
+  sessionCompilerChoice: "local" | "cloud" | null;
+  setSessionCompilerChoice: (choice: "local" | "cloud") => void;
   activeSidePanel: SidePanelId | null;
   setActiveSidePanel: (panel: SidePanelId | null) => void;
   /** Set by the user manually picking a rail icon — suppresses auto-switching until the cursor leaves the current context. */
@@ -109,6 +116,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   compile: null,
   lastCompileMainFile: null,
   isCompiling: false,
+  sessionCompilerChoice: null,
+  setSessionCompilerChoice: (choice) => set({ sessionCompilerChoice: choice }),
   activeSidePanel: null,
   setActiveSidePanel: (panel) =>
     set((state) => ({
@@ -156,6 +165,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       compile: null,
       lastCompileMainFile: null,
       isCompiling: false,
+      sessionCompilerChoice: null,
     });
     const files = await listFiles(projectId);
     const main = files.find((f) => f.isMain) ?? files.find((f) => f.type === "file");
@@ -294,7 +304,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const user = await getCurrentUser();
     const preference = user.editorDefaults.compilerPreference ?? "prefer-local";
     const agentInfo = preference === "always-cloud" ? null : await detectLocal();
-    const source = resolveCompileSource(preference, agentInfo, compiler);
+    const source = resolveCompileSource(preference, agentInfo, compiler, get().sessionCompilerChoice);
 
     let smartFiles: LocalCompileFileInput[] = [];
     let mainFilePath = "main.tex";
