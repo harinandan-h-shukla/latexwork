@@ -144,6 +144,10 @@ export interface ProjectFile {
   name: string;
   path: string;
   isMain: boolean;
+  /** Only meaningful when type is "folder" — which child file compiles
+   * when the open file is inside this folder but isn't itself a
+   * \documentclass file. See the schema field's own comment. */
+  folderMainFileId?: string | null;
   isBinary: boolean;
   sizeBytes: number;
   mimeType?: string;

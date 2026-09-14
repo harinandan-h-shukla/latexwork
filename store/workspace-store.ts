@@ -12,6 +12,7 @@ import {
   listFiles,
   moveFile,
   renameFile,
+  setFolderMainFile,
   setMainFile,
   updateFileContent,
   type CompileOptions,
@@ -100,6 +101,7 @@ interface WorkspaceState {
   moveFileNode: (fileId: string, newParentId: string | null) => Promise<void>;
   duplicateFileNode: (fileId: string) => Promise<void>;
   setMainFileNode: (fileId: string) => Promise<void>;
+  setFolderMainFileNode: (folderId: string, fileId: string) => Promise<void>;
 
   runCompile: (options?: CompileOptions) => Promise<void>;
   cancelCompile: () => Promise<void>;
@@ -290,6 +292,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     }));
   },
 
+  setFolderMainFileNode: async (folderId, fileId) => {
+    const { projectId } = get();
+    if (!projectId) return;
+    await setFolderMainFile(folderId, fileId);
+    set((state) => ({
+      files: state.files.map((f) => (f.id === folderId ? { ...f, folderMainFileId: fileId } : f)),
+    }));
+  },
+
   runCompile: async (options) => {
     const { projectId, files, fileContents, compile: inFlight, isCompiling } = get();
     if (!projectId) return;
@@ -337,9 +348,28 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       const activeFileIsStandalone =
         activeFile && activeFileContent !== undefined && activeFileContent.includes("\\documentclass");
 
-      const mainFile = activeFileIsStandalone
-        ? activeFile
-        : (files.find((f) => f.isMain) ?? files.find((f) => f.type === "file" && f.name.endsWith(".tex")));
+      // Second priority, below "the open file is itself a \documentclass
+      // file" and above the project's single global main file: the open
+      // file's own parent folder may have a sticky "main file for this
+      // folder" set (via "Set as main file for this folder" in the file
+      // tree) — covers a section file that's \input{}-ed within one of
+      // several independent papers bundled as folders, where the open file
+      // itself never contains \documentclass but should still resolve to
+      // that paper's real entry point, not the project's unrelated global
+      // main file.
+      const parentFolder = activeFile
+        ? files.find((f) => f.id === activeFile.parentId && f.type === "folder")
+        : undefined;
+      const folderMainFile = parentFolder?.folderMainFileId
+        ? files.find((f) => f.id === parentFolder.folderMainFileId && f.type === "file" && !f.isBinary)
+        : undefined;
+
+      const mainFile =
+        activeFileIsStandalone
+          ? activeFile
+          : (folderMainFile ??
+            files.find((f) => f.isMain) ??
+            files.find((f) => f.type === "file" && f.name.endsWith(".tex")));
       mainFilePath = (mainFile?.path ?? "/main.tex").replace(/^\//, "");
       const textFiles = files.filter((f) => f.type === "file" && !f.isBinary);
       // Binary files (images/figures) used to be excluded entirely, which
