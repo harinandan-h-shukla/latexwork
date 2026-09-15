@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangleIcon, CheckCircle2Icon, CopyIcon, ExternalLinkIcon, ZapIcon } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { AlertTriangleIcon, CheckCircle2Icon, ExternalLinkIcon, ZapIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CopyableCommand } from "@/components/settings/copyable-command";
 
 type Os = "macos" | "windows" | "linux";
 
@@ -112,27 +111,6 @@ const BUILD_COMMAND = "npm install && npm run build";
 // real run reproducing exactly that.
 const START_COMMAND_PLAIN = "npm start";
 
-function CopyableCommand({ command }: { command: string }) {
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(command);
-      toast.success("Copied");
-    } catch {
-      toast.error("Couldn't copy — select and copy it manually");
-    }
-  }
-  return (
-    <div className="flex items-center gap-1.5">
-      <code className="block flex-1 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre">
-        {command}
-      </code>
-      <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={copy} title="Copy">
-        <CopyIcon className="size-3.5" />
-      </Button>
-    </div>
-  );
-}
-
 function InstallOptionCard({ option, recommended }: { option: InstallOption; recommended?: boolean }) {
   return (
     <div className="space-y-3 rounded-lg border p-3">
@@ -208,9 +186,13 @@ export default function LocalCompilerSetupPage() {
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Set up local compilation</h1>
         <p className="mt-1 text-muted-foreground">
-          Compile LaTeX directly on this computer instead of the cloud queue — faster previews, and it keeps
-          working offline. This requires two things installed on your own machine: a TeX distribution, and this
-          project&apos;s local-agent service.
+          Used by the{" "}
+          <Link href="/desktop" className="underline underline-offset-2 hover:text-foreground">
+            Inkwell desktop app
+          </Link>{" "}
+          to compile LaTeX directly on your own computer instead of the cloud compiler — faster previews, and it
+          keeps working offline. This requires two things installed on your own machine: a TeX distribution, and
+          this project&apos;s local-agent service.
         </p>
       </div>
 

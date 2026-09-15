@@ -6,6 +6,7 @@ import { CommentsPanel } from "@/components/collaboration/comments-panel";
 import { CURRENT_USER_ID } from "@/lib/mock-api/db";
 import { listComments, listTrackedChanges } from "@/lib/mock-api/collaboration";
 import { useWorkspaceStore } from "@/store/workspace-store";
+import { useIsDesktopApp } from "@/lib/runtime/use-is-desktop-app";
 
 interface ReviewStatus {
   total: number;
@@ -30,6 +31,7 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: number; 
 export function ReviewWorkspace({ projectId }: { projectId: string }) {
   const loadProject = useWorkspaceStore((s) => s.loadProject);
   const [status, setStatus] = useState<ReviewStatus | null>(null);
+  const isDesktop = useIsDesktopApp();
 
   useEffect(() => {
     if (useWorkspaceStore.getState().projectId !== projectId) {
@@ -70,7 +72,7 @@ export function ReviewWorkspace({ projectId }: { projectId: string }) {
       )}
 
       <div className="h-[560px] overflow-hidden rounded-xl border border-border">
-        <CommentsPanel projectId={projectId} />
+        <CommentsPanel projectId={projectId} readOnly={!isDesktop} />
       </div>
     </div>
   );

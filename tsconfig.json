@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "local-agent", "cloud-compiler"]
+  "exclude": ["node_modules", "local-agent", "cloud-compiler", "desktop", "realtime-hub"]
 }

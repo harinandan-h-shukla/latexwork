@@ -17,7 +17,7 @@ const OPTIONS: { value: CompilerPreference; label: string; description: string }
   {
     value: "prefer-local",
     label: "Prefer local compiler",
-    description: "Use the local agent whenever it's available; otherwise compile right in this browser.",
+    description: "In the desktop app, use your local agent whenever it's available; otherwise use the cloud compiler.",
   },
   {
     value: "always-cloud",
@@ -86,7 +86,9 @@ export function LocalCompilerPanel({ user, onUserChange }: LocalCompilerPanelPro
       <CardHeader>
         <CardTitle>Local compiler</CardTitle>
         <CardDescription>
-          Compile LaTeX on this computer via a small local agent, instead of the cloud compile queue.
+          Editing and compiling only happen in the Inkwell desktop app — this sets which compiler it prefers once
+          you&apos;re there: your own machine (via a small local agent) or the cloud compiler. This website only
+          views and downloads your projects, so this preference has no effect here.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -119,7 +121,7 @@ export function LocalCompilerPanel({ user, onUserChange }: LocalCompilerPanelPro
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <XCircleIcon className="size-4" />
-                Not connected — falls back to compiling in this browser.
+                Not connected — the desktop app will fall back to the cloud compiler.
               </p>
               <Button variant="outline" size="sm" className="h-7 gap-1.5" onClick={() => setInstallDialogOpen(true)}>
                 <DownloadIcon className="size-3.5" />

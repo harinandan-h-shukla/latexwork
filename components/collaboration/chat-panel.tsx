@@ -12,6 +12,7 @@ import { extractMentionIds, formatRelativeTime } from "@/components/collaboratio
 import { listChatMessages, sendChatMessage } from "@/lib/mock-api/collaboration";
 import { getCurrentUser } from "@/lib/mock-api/auth";
 import { useProjectUsers } from "@/components/collaboration/use-project-users";
+import { useRealtimeProject } from "@/lib/realtime/use-realtime-project";
 import type { ChatMessage } from "@/lib/types";
 
 export function ChatPanel({ projectId }: { projectId: string }) {
@@ -38,6 +39,12 @@ export function ChatPanel({ projectId }: { projectId: string }) {
       await refresh();
     })();
   }, [refresh]);
+
+  // Live updates (Spike B): another collaborator's chat send fires a
+  // "something changed" push through realtime-hub; when it reaches us here,
+  // just re-run the same refresh() this panel already calls on mount and
+  // after our own sends — no new data shape, same refetch-on-signal pattern.
+  useRealtimeProject(projectId, refresh);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });

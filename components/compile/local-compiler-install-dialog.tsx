@@ -121,14 +121,14 @@ export function LocalCompilerInstallDialog({
               <DialogTitle>Local compilation isn&apos;t installed</DialogTitle>
               <DialogDescription>
                 Compile documents directly on your computer for faster previews and to avoid waiting on remote
-                compile queues.
+                compile queues — used by the Inkwell desktop app, once you have it installed.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
               <p className="flex items-center gap-2 font-medium text-foreground">
                 <ShieldCheckIcon className="size-4 shrink-0" />
-                This installs a small local compiler service that lets this site compile LaTeX projects on your
-                computer.
+                This installs a small local compiler service that lets the Inkwell desktop app compile LaTeX
+                projects on your computer.
               </p>
               <p>It can access:</p>
               <ul className="list-disc space-y-0.5 pl-5">

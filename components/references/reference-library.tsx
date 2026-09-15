@@ -23,7 +23,7 @@ interface ReferenceLibraryProps {
   projectId: string;
   entries: BibEntry[];
   highlightKey?: string | null;
-  onEdit: (entry: BibEntry) => void;
+  onEdit?: (entry: BibEntry) => void;
 }
 
 export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: ReferenceLibraryProps) {
@@ -145,7 +145,7 @@ export function ReferenceLibrary({ projectId, entries, highlightKey, onEdit }: R
                         <ExternalLinkIcon />
                         Open
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(entry)}>Edit entry</DropdownMenuItem>
+                      {onEdit && <DropdownMenuItem onClick={() => onEdit(entry)}>Edit entry</DropdownMenuItem>}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

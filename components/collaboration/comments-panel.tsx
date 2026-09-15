@@ -17,7 +17,16 @@ import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { Comment } from "@/lib/types";
 
-export function CommentsPanel({ projectId }: { projectId: string }) {
+/**
+ * `readOnly` (default false, used by the web's ProjectViewOnlyWorkspace and
+ * ReviewWorkspace once gated by useIsDesktopApp — see
+ * ~/.claude/plans/cozy-spinning-toucan.md's Phase 3) hides the "add new
+ * comment" composer and Track Changes' accept/reject actions, since anchoring
+ * a new comment to open-file text requires an actual open editor
+ * (activeFileId/editorHandle below), which only exists in the desktop app's
+ * EditorWorkspace. Listing/reading existing comments is unaffected.
+ */
+export function CommentsPanel({ projectId, readOnly = false }: { projectId: string; readOnly?: boolean }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
@@ -84,23 +93,25 @@ export function CommentsPanel({ projectId }: { projectId: string }) {
         </TabsList>
 
         <TabsContent value="comments" className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-col gap-2 border-b p-3">
-            <MentionTextarea
-              value={draft}
-              onChange={setDraft}
-              users={users}
-              placeholder={activeFile ? `Comment on ${activeFile.name}… use @ to mention` : "Open a file to comment"}
-              rows={2}
-            />
-            <Button
-              size="sm"
-              className="w-full gap-1.5"
-              onClick={handlePost}
-              disabled={posting || !draft.trim() || !activeFileId}
-            >
-              <SendIcon className="size-3.5" /> Comment
-            </Button>
-          </div>
+          {!readOnly && (
+            <div className="flex flex-col gap-2 border-b p-3">
+              <MentionTextarea
+                value={draft}
+                onChange={setDraft}
+                users={users}
+                placeholder={activeFile ? `Comment on ${activeFile.name}… use @ to mention` : "Open a file to comment"}
+                rows={2}
+              />
+              <Button
+                size="sm"
+                className="w-full gap-1.5"
+                onClick={handlePost}
+                disabled={posting || !draft.trim() || !activeFileId}
+              >
+                <SendIcon className="size-3.5" /> Comment
+              </Button>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex flex-col gap-2 p-3">
@@ -121,7 +132,7 @@ export function CommentsPanel({ projectId }: { projectId: string }) {
         </TabsContent>
 
         <TabsContent value="changes" className="flex min-h-0 flex-1 flex-col">
-          <TrackChangesTab projectId={projectId} />
+          <TrackChangesTab projectId={projectId} readOnly={readOnly} />
         </TabsContent>
       </Tabs>
     </div>

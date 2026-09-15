@@ -28,7 +28,7 @@ import {
 import { useProjectUsers } from "@/components/collaboration/use-project-users";
 import type { TrackedChange } from "@/lib/types";
 
-export function TrackChangesTab({ projectId }: { projectId: string }) {
+export function TrackChangesTab({ projectId, readOnly = false }: { projectId: string; readOnly?: boolean }) {
   const [changes, setChanges] = useState<TrackedChange[]>([]);
   const [loading, setLoading] = useState(true);
   const [userFilter, setUserFilter] = useState<string>("all");
@@ -122,26 +122,28 @@ export function TrackChangesTab({ projectId }: { projectId: string }) {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-1 gap-1"
-            disabled={busy || pendingVisible.length === 0}
-            onClick={() => handleBulk("accept")}
-          >
-            <CheckIcon className="size-3.5" /> Accept all
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-1 gap-1"
-            disabled={busy || pendingVisible.length === 0}
-            onClick={() => handleBulk("reject")}
-          >
-            <XIcon className="size-3.5" /> Reject all
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1"
+              disabled={busy || pendingVisible.length === 0}
+              onClick={() => handleBulk("accept")}
+            >
+              <CheckIcon className="size-3.5" /> Accept all
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-1"
+              disabled={busy || pendingVisible.length === 0}
+              onClick={() => handleBulk("reject")}
+            >
+              <XIcon className="size-3.5" /> Reject all
+            </Button>
+          </div>
+        )}
       </div>
 
       {!reviewMode ? (
@@ -178,7 +180,7 @@ export function TrackChangesTab({ projectId }: { projectId: string }) {
                 >
                   {c.text}
                 </p>
-                {c.status === "pending" && (
+                {!readOnly && c.status === "pending" && (
                   <div className="mt-2 flex justify-end gap-1.5">
                     <Button
                       size="icon-sm"

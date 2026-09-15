@@ -1,0 +1,42 @@
+# Rename `app` to whatever you claim with `fly apps create <name>` before
+# the first `fly deploy`. Set secrets separately (never in this file):
+#   fly secrets set REALTIME_HUB_SHARED_SECRET=<a long random value>
+# The same value goes into the Vercel project as REALTIME_HUB_SHARED_SECRET
+# (used both for POST /broadcast's bearer auth and as the HMAC key the
+# Next.js side signs client subscribe tokens with), and the Next.js side's
+# REALTIME_HUB_URL should be this app's https://<app>.fly.dev (wss:// for
+# the WebSocket path).
+app = "inkwell-realtime"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Unlike cloud-compiler's pay-per-use autostop: this service holds
+  # long-lived WebSocket connections, and Fly's autostop is
+  # connection-count-based with undocumented behavior for idle (no-data-frames)
+  # WebSockets — real community reports exist of long-lived WS connections
+  # being cut on autostop machines. Fly's own guidance for long-running
+  # workloads is auto_stop_machines = "off". Don't bet collaborator UX on
+  # undocumented idle-WS handling.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+# This service does no compute-heavy work — just holds sockets and forwards
+# small JSON payloads — so the smallest VM tier is enough.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

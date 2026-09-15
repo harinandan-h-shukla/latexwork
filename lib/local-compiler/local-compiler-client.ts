@@ -5,6 +5,7 @@ import type {
   LocalSyncTexForward,
   LocalSyncTexInverse,
 } from "@/lib/local-compiler/types";
+import { localFetch } from "@/lib/local-compiler/tauri-fetch-adapter";
 
 export const DEFAULT_LOCAL_AGENT_PORT = 47823;
 
@@ -38,7 +39,7 @@ async function fetchJson<T>(path: string, init?: RequestInit, timeoutMs = 4000):
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${baseUrl()}${path}`, { ...init, signal: controller.signal });
+    const res = await localFetch(`${baseUrl()}${path}`, { ...init, signal: controller.signal });
     if (!res.ok) {
       let message = `Local agent request failed (${res.status})`;
       try {

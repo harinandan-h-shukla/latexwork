@@ -1,0 +1,26 @@
+{
+  "name": "inkwell-realtime-hub",
+  "version": "0.1.0",
+  "description": "Minimal WebSocket push service for real-time collaboration notifications — a \"something changed, go refetch\" ping mechanism, not a CRDT/op-log sync layer. Server-to-server callers (the Next.js app, after a real mutation) authenticate with a shared bearer secret; individual browser/desktop clients authenticate per-subscribe with a short-lived signed token proving they actually have access to the projectId they're subscribing to.",
+  "private": true,
+  "main": "dist/cli.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

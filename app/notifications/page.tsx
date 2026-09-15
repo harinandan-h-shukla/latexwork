@@ -6,8 +6,10 @@ import { format, isThisYear, isToday, isYesterday } from "date-fns";
 import { ArrowLeftIcon, BellIcon, CheckCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { listNotifications, markAllAsRead, markAsRead } from "@/lib/mock-api/notifications";
+import { respondToInvite } from "@/lib/mock-api/collaboration";
 import { getCurrentUser } from "@/lib/mock-api/auth";
 import type { NotificationItem } from "@/lib/types";
 
@@ -66,6 +68,20 @@ export default function NotificationsPage() {
     await markAllAsRead(userId);
   }
 
+  async function handleRespondToInvite(notificationId: string, accept: boolean) {
+    try {
+      await respondToInvite(notificationId, accept);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notificationId ? { ...n, inviteStatus: accept ? "accepted" : "declined", read: true } : n
+        )
+      );
+      toast.success(accept ? "Invite accepted — you now have access." : "Invite declined.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not respond to this invite");
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
       <div className="flex flex-col gap-3">
@@ -116,7 +132,11 @@ export default function NotificationsPage() {
                 {label}
               </h2>
               <div className="rounded-xl ring-1 ring-foreground/10">
-                <NotificationList notifications={items} onMarkRead={handleMarkRead} />
+                <NotificationList
+                  notifications={items}
+                  onMarkRead={handleMarkRead}
+                  onRespondToInvite={handleRespondToInvite}
+                />
               </div>
             </div>
           ))}

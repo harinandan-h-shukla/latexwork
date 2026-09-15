@@ -12,6 +12,11 @@ const NotificationSchema = new Schema(
     actorId: { type: Schema.Types.ObjectId, ref: "User" },
     text: { type: String, required: true },
     read: { type: Boolean, default: false },
+    /** Only set for kind "share_invite" — the role the invite would grant,
+     * and whether the recipient has acted on it yet. Left undefined for
+     * every other notification kind. */
+    role: { type: String, enum: ["editor", "reviewer", "viewer"] },
+    inviteStatus: { type: String, enum: ["pending", "accepted", "declined"] },
   },
   { timestamps: { createdAt: "createdAt", updatedAt: false } },
 );
