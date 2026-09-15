@@ -92,6 +92,27 @@ async function getRunner(): Promise<BusyTexRunnerInstance> {
       // "texlive-basic" (not "-recommended", which is ~3x bigger) is the
       // smallest collection that gets a plain article to compile.
       preloadDataPackages: [`${BUSYTEX_BASE_PATH}/texlive-basic.js`],
+      // Real bug, real repro on the deployed site: a document using
+      // \usepackage{microtype} (an extremely common package — pulled in by
+      // many document classes, not just used explicitly) failed with
+      // "File `microtype.sty' not found" even though texlive-basic's own
+      // "unresolved package -> enable all available data packages"
+      // fallback ran. That fallback can only search catalogs the runner
+      // was actually told about — texlive-basic was the ONLY one preloaded
+      // and no catalogDataPackages were ever declared, so microtype (which
+      // lives in texlive-recommended, not -basic) was structurally
+      // impossible to find, fallback or not. catalogDataPackages registers
+      // a package tier as *available for on-demand loading* without
+      // preloading its full .data payload up front (confirmed by the
+      // README: "Data packages available for later loading") — the earlier
+      // real end-to-end compile test already showed this kind of lazy
+      // fetch only pulls in what's actually needed, not the whole tier, so
+      // registering both remaining tiers here shouldn't meaningfully slow
+      // down documents that don't need them.
+      catalogDataPackages: [
+        `${BUSYTEX_BASE_PATH}/texlive-recommended.js`,
+        `${BUSYTEX_BASE_PATH}/texlive-extra.js`,
+      ],
       onDownloadProgress: (progress) => currentProgressHandler?.(progress.loaded, progress.total),
     });
     await runner.initialize(true);
