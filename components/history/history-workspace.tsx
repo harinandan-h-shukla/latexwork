@@ -21,6 +21,7 @@ import { SaveVersionDialog } from "@/components/history/save-version-dialog";
 import { VersionDiffView } from "@/components/history/version-diff-view";
 import { listVersions, restoreVersion } from "@/lib/mock-api/history";
 import { mockDb } from "@/lib/mock-api/db";
+import { useIsDesktopApp } from "@/lib/runtime/use-is-desktop-app";
 import type { User, Version } from "@/lib/types";
 
 export function HistoryWorkspace({ projectId }: { projectId: string }) {
@@ -28,6 +29,7 @@ export function HistoryWorkspace({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [userFilter, setUserFilter] = useState<string>("all");
   const [selected, setSelected] = useState<string[]>([]);
+  const isDesktop = useIsDesktopApp();
 
   const refresh = useCallback(async () => {
     const list = await listVersions(projectId);
@@ -117,7 +119,7 @@ export function HistoryWorkspace({ projectId }: { projectId: string }) {
               ))}
             </SelectContent>
           </Select>
-          <SaveVersionDialog projectId={projectId} onSaved={refresh} />
+          {isDesktop && <SaveVersionDialog projectId={projectId} onSaved={refresh} />}
         </div>
       </div>
 
@@ -158,9 +160,11 @@ export function HistoryWorkspace({ projectId }: { projectId: string }) {
                   <Button variant="ghost" size="icon-sm" title="Download this version" onClick={() => handleDownload(v)}>
                     <DownloadIcon className="size-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Restore this version" onClick={() => handleRestore(v)}>
-                    <RotateCcwIcon className="size-3.5" />
-                  </Button>
+                  {isDesktop && (
+                    <Button variant="ghost" size="icon-sm" title="Restore this version" onClick={() => handleRestore(v)}>
+                      <RotateCcwIcon className="size-3.5" />
+                    </Button>
+                  )}
                 </div>
               </li>
             );

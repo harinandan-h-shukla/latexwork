@@ -20,6 +20,7 @@ import {
   type BrokenReferences,
 } from "@/lib/mock-api/references";
 import type { BibEntry, ProjectFile } from "@/lib/types";
+import { useIsDesktopApp } from "@/lib/runtime/use-is-desktop-app";
 
 interface ReferencesWorkspaceProps {
   projectId: string;
@@ -35,6 +36,7 @@ export function ReferencesWorkspace({ projectId }: ReferencesWorkspaceProps) {
   const [broken, setBroken] = useState<BrokenReferences>({ undefinedCites: [], unusedEntries: [] });
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"library" | "raw">("library");
+  const isDesktop = useIsDesktopApp();
 
   const refresh = useCallback(async (fileId: string) => {
     const [entryList, dupes, brokenRefs] = await Promise.all([
@@ -85,35 +87,39 @@ export function ReferencesWorkspace({ projectId }: ReferencesWorkspaceProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as "library" | "raw")}>
-            <TabsList>
-              <TabsTrigger value="library" className="gap-1.5">
-                <LibraryIcon className="size-3.5" />
-                Library
-              </TabsTrigger>
-              <TabsTrigger value="raw" className="gap-1.5">
-                <TableIcon className="size-3.5" />
-                Raw .bib
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {isDesktop && (
+            <Tabs value={view} onValueChange={(v) => setView(v as "library" | "raw")}>
+              <TabsList>
+                <TabsTrigger value="library" className="gap-1.5">
+                  <LibraryIcon className="size-3.5" />
+                  Library
+                </TabsTrigger>
+                <TabsTrigger value="raw" className="gap-1.5">
+                  <TableIcon className="size-3.5" />
+                  Raw .bib
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           <BibStylePreview entries={entries} />
-          <CitationImportDialog
-            fileId={file.id}
-            existingKeys={entries.map((e) => e.key)}
-            onImported={() => refresh(file.id)}
-          />
+          {isDesktop && (
+            <CitationImportDialog
+              fileId={file.id}
+              existingKeys={entries.map((e) => e.key)}
+              onImported={() => refresh(file.id)}
+            />
+          )}
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          {view === "library" ? (
+          {view === "library" || !isDesktop ? (
             <ReferenceLibrary
               projectId={projectId}
               entries={entries}
               highlightKey={highlightKey}
-              onEdit={() => setView("raw")}
+              onEdit={isDesktop ? () => setView("raw") : undefined}
             />
           ) : (
             <BibEditor fileId={file.id} entries={entries} onChange={() => refresh(file.id)} />
@@ -125,12 +131,14 @@ export function ReferencesWorkspace({ projectId }: ReferencesWorkspaceProps) {
             entries={entries}
             duplicateKeys={duplicateKeys}
             onChanged={() => refresh(file.id)}
+            readOnly={!isDesktop}
           />
           <BrokenReferencePanel
             fileId={file.id}
             undefinedCites={broken.undefinedCites}
             unusedEntries={broken.unusedEntries}
             onCreated={() => refresh(file.id)}
+            readOnly={!isDesktop}
           />
         </div>
       </div>

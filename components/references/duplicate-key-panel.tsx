@@ -14,9 +14,10 @@ interface DuplicateKeyPanelProps {
   entries: BibEntry[];
   duplicateKeys: string[];
   onChanged: () => void;
+  readOnly?: boolean;
 }
 
-export function DuplicateKeyPanel({ entries, duplicateKeys, onChanged }: DuplicateKeyPanelProps) {
+export function DuplicateKeyPanel({ entries, duplicateKeys, onChanged, readOnly = false }: DuplicateKeyPanelProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
   async function handleRename(entry: BibEntry) {
@@ -68,14 +69,16 @@ export function DuplicateKeyPanel({ entries, duplicateKeys, onChanged }: Duplica
                           {entry.fields.title || "Untitled"}{" "}
                           {entry.fields.year ? `(${entry.fields.year})` : ""}
                         </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={renamingId === entry.id}
-                          onClick={() => handleRename(entry)}
-                        >
-                          Rename
-                        </Button>
+                        {!readOnly && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={renamingId === entry.id}
+                            onClick={() => handleRename(entry)}
+                          >
+                            Rename
+                          </Button>
+                        )}
                       </li>
                     ))}
                   </ul>

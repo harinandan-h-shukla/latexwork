@@ -5,8 +5,10 @@ import { GitSyncPanel } from "./git-sync-panel";
 import { CloudConnectPanel } from "./cloud-connect-panel";
 import { ApiKeysPanel } from "./api-keys-panel";
 import { WebhookPanel } from "./webhook-panel";
+import { useIsDesktopApp } from "@/lib/runtime/use-is-desktop-app";
 
 export function IntegrationsWorkspace({ projectId }: { projectId: string }) {
+  const isDesktop = useIsDesktopApp();
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -17,7 +19,11 @@ export function IntegrationsWorkspace({ projectId }: { projectId: string }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <ImportPanel projectId={projectId} />
+        {/* Zip import mutates project files directly — desktop-only, per the
+            confirmed Phase 3 scope (the website never edits/writes .tex
+            content). The other integration panels (git sync, cloud connect,
+            API keys, webhooks) are unaffected by that scope. */}
+        {isDesktop && <ImportPanel projectId={projectId} />}
         <GitSyncPanel projectId={projectId} />
         <CloudConnectPanel projectId={projectId} />
         <ApiKeysPanel projectId={projectId} />

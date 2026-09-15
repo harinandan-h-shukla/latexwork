@@ -12,6 +12,7 @@ interface BrokenReferencePanelProps {
   undefinedCites: string[];
   unusedEntries: string[];
   onCreated: () => void;
+  readOnly?: boolean;
 }
 
 export function BrokenReferencePanel({
@@ -19,6 +20,7 @@ export function BrokenReferencePanel({
   undefinedCites,
   unusedEntries,
   onCreated,
+  readOnly = false,
 }: BrokenReferencePanelProps) {
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
 
@@ -58,14 +60,16 @@ export function BrokenReferencePanel({
               {undefinedCites.map((key) => (
                 <li key={key} className="flex items-center justify-between gap-2 text-sm">
                   <span className="font-mono text-destructive">{key}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={creatingKey === key}
-                    onClick={() => handleCreateStub(key)}
-                  >
-                    Create entry
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={creatingKey === key}
+                      onClick={() => handleCreateStub(key)}
+                    >
+                      Create entry
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

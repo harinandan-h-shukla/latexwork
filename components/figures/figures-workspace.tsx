@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FigureInsertDialog } from "@/components/latex/figure-insert-dialog";
 import { useWorkspaceStore } from "@/store/workspace-store";
+import { useIsDesktopApp } from "@/lib/runtime/use-is-desktop-app";
 
 interface FiguresWorkspaceProps {
   projectId: string;
@@ -19,6 +20,7 @@ export function FiguresWorkspace({ projectId }: FiguresWorkspaceProps) {
   const editorHandle = useWorkspaceStore((s) => s.editorHandle);
   const loadProject = useWorkspaceStore((s) => s.loadProject);
   const [insertOpen, setInsertOpen] = useState(false);
+  const isDesktop = useIsDesktopApp();
 
   useEffect(() => {
     if (useWorkspaceStore.getState().projectId !== projectId) {
@@ -60,10 +62,12 @@ export function FiguresWorkspace({ projectId }: FiguresWorkspaceProps) {
             {images.length} image{images.length === 1 ? "" : "s"} in this project
           </p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => setInsertOpen(true)}>
-          <PlusIcon className="size-3.5" />
-          Insert figure
-        </Button>
+        {isDesktop && (
+          <Button size="sm" className="gap-1.5" onClick={() => setInsertOpen(true)}>
+            <PlusIcon className="size-3.5" />
+            Insert figure
+          </Button>
+        )}
       </div>
 
       {isLoadingFiles ? (
@@ -76,7 +80,7 @@ export function FiguresWorkspace({ projectId }: FiguresWorkspaceProps) {
         <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-16 text-center">
           <ImageIcon className="size-6 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            No figures yet — use Insert figure to upload one.
+            {isDesktop ? "No figures yet — use Insert figure to upload one." : "No figures yet."}
           </p>
         </div>
       ) : (
@@ -116,7 +120,9 @@ export function FiguresWorkspace({ projectId }: FiguresWorkspaceProps) {
         </div>
       )}
 
-      <FigureInsertDialog open={insertOpen} onOpenChange={setInsertOpen} editorHandle={editorHandle} />
+      {isDesktop && (
+        <FigureInsertDialog open={insertOpen} onOpenChange={setInsertOpen} editorHandle={editorHandle} />
+      )}
     </div>
   );
 }
