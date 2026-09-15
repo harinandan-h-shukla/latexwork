@@ -49,6 +49,103 @@ function isRealId(value: string): boolean {
 const MAX_COLLABORATORS_PER_PROJECT = 10;
 
 // ---------------------------------------------------------------------------
+// Authorization helpers (real-Mongo projects only — the legacy in-memory
+// demo path has no session and stays scoped to CURRENT_USER_ID as before).
+//
+// SECURITY FIX: every export below that reads or mutates something scoped to
+// a real project (the project itself, its files/comments/tracked
+// changes/chat/presence/collaborator list) used to trust whatever
+// projectId/userId the client sent, with no check that the caller actually
+// had any relationship to that project. Concretely, this let any signed-in
+// user who knew (or guessed) a project's Mongo ObjectId read its
+// comments/chat/tracked changes, and let any collaborator — including a
+// "viewer" — call updateCollaboratorRole/removeCollaborator/transferOwnership
+// on collaborators of a project they didn't own. Every function now verifies
+// access before doing anything, via the same
+// ProjectModel.ownerId / CollaboratorModel.exists({ projectId, userId })
+// query shape already used correctly in lib/mock-api/projects.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * Verifies the calling user has real access to `projectId` and returns their
+ * user id. Throws a real `Error` (never a silent no-op/empty result) when
+ * they don't, so a disallowed caller gets something debuggable.
+ *
+ * - minRole "collaborator" (default): the project owner OR any collaborator
+ *   row (any role — editor/reviewer/viewer) may proceed. This is for
+ *   reading/writing project content: files, comments, tracked changes, chat,
+ *   presence, and listing who has access. The 4-role system
+ *   (owner/editor/reviewer/viewer, see lib/types.ts's Role) doesn't have any
+ *   finer-grained read/write split enforced anywhere else in this codebase
+ *   (no existing frontend gate makes the editor read-only for
+ *   reviewer/viewer, for instance), so this fix doesn't invent one — it only
+ *   closes the "no relationship to the project at all" hole.
+ * - minRole "owner": only the project's current owner may proceed. Used for
+ *   collaborator-management mutations (inviting, changing someone else's
+ *   role, removing someone else, transferring ownership, toggling
+ *   public/private visibility) — mirroring the Share dialog's own
+ *   isOwner-gated UI for the transfer/remove buttons, which the server
+ *   never actually enforced (and which the role-change dropdown and the
+ *   public-visibility switch didn't get gated by at all, client or server —
+ *   the actual exploited bug). Judgment call: an editor is not treated as
+ *   able to manage sharing, only the owner is — there's no existing
+ *   precedent in this codebase suggesting collaborator management should be
+ *   delegated below owner.
+ */
+async function requireProjectAccess(
+  projectId: string,
+  minRole: "owner" | "collaborator" = "collaborator"
+): Promise<string> {
+  const userId = await requireUserId();
+  const project = await ProjectModel.findById(projectId).select("ownerId");
+  if (!project) throw new Error("Project not found");
+  if (String(project.ownerId) === userId) return userId;
+  if (minRole === "owner") {
+    throw new Error("Not authorized: only the project owner can do this");
+  }
+  const isCollaborator = await CollaboratorModel.exists({ projectId, userId });
+  if (!isCollaborator) {
+    throw new Error("Not authorized: you don't have access to this project");
+  }
+  return userId;
+}
+
+/**
+ * Same as requireProjectAccess(projectId, "owner"), except the caller is
+ * also allowed through when they are acting on their own collaborator row
+ * (targetUserId === caller) — a collaborator should always be able to
+ * remove *themselves* (leave the project) without needing owner rights,
+ * even though no "Leave project" UI calls this yet.
+ */
+async function requireOwnerOrSelf(projectId: string, targetUserId: string): Promise<string> {
+  const callerId = await requireUserId();
+  if (callerId === targetUserId) return callerId;
+  const project = await ProjectModel.findById(projectId).select("ownerId");
+  if (!project) throw new Error("Project not found");
+  if (String(project.ownerId) !== callerId) {
+    throw new Error("Not authorized: only the project owner can do this");
+  }
+  return callerId;
+}
+
+/** Looks up which project a comment belongs to, for access checks on
+ * comment-id-keyed operations (reply/resolve/reopen) that don't get a
+ * projectId from the caller directly. */
+async function projectIdForComment(commentId: string): Promise<string> {
+  const comment = await CommentModel.findById(commentId).select("projectId");
+  if (!comment) throw new Error("Comment not found");
+  return String(comment.projectId);
+}
+
+/** Same as projectIdForComment, for tracked-change-id-keyed operations
+ * (accept/reject one change). */
+async function projectIdForChange(changeId: string): Promise<string> {
+  const change = await TrackedChangeModel.findById(changeId).select("projectId");
+  if (!change) throw new Error("Tracked change not found");
+  return String(change.projectId);
+}
+
+// ---------------------------------------------------------------------------
 // Real-Mongo → shared-type mappers, mirroring the toUser() pattern already
 // used elsewhere — ObjectId fields go through String(), Date fields go
 // through .toISOString(), so every real branch below returns exactly the
@@ -174,6 +271,7 @@ function demoAuthors(projectId: string): string[] {
 export async function listPresence(projectId: string): Promise<PresenceInfo[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     // No real writer exists yet for this collection (no WebSocket/heartbeat
     // path — see the note on PresenceModel in lib/db/models/collaboration.ts,
     // real-time presence belongs in Redis/an ephemeral store in a real
@@ -270,6 +368,7 @@ function seedComments(projectId: string): void {
 export async function listComments(projectId: string): Promise<Comment[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const rows = await CommentModel.find({ projectId }).sort({ createdAt: 1 });
     return rows.map(toComment);
   }
@@ -289,7 +388,7 @@ export async function createComment(
 ): Promise<Comment> {
   if (isRealId(projectId)) {
     await getDb();
-    const authorId = await requireUserId();
+    const authorId = await requireProjectAccess(projectId);
     const created = await CommentModel.create({
       projectId,
       fileId,
@@ -330,7 +429,7 @@ export async function replyToComment(
 ): Promise<CommentReply> {
   if (isRealId(commentId)) {
     await getDb();
-    const authorId = await requireUserId();
+    const authorId = await requireProjectAccess(await projectIdForComment(commentId));
     const comment = await CommentModel.findById(commentId);
     if (!comment) throw new Error("Comment not found");
     comment.replies.push({ authorId, text, mentions } as never);
@@ -367,7 +466,7 @@ export async function replyToComment(
 export async function resolveComment(commentId: string): Promise<void> {
   if (isRealId(commentId)) {
     await getDb();
-    const resolvedBy = await requireUserId();
+    const resolvedBy = await requireProjectAccess(await projectIdForComment(commentId));
     await CommentModel.updateOne({ _id: commentId }, { resolved: true, resolvedBy, resolvedAt: new Date() });
     return;
   }
@@ -383,6 +482,7 @@ export async function resolveComment(commentId: string): Promise<void> {
 export async function reopenComment(commentId: string): Promise<void> {
   if (isRealId(commentId)) {
     await getDb();
+    await requireProjectAccess(await projectIdForComment(commentId));
     await CommentModel.updateOne(
       { _id: commentId },
       { resolved: false, $unset: { resolvedBy: 1, resolvedAt: 1 } }
@@ -471,6 +571,7 @@ function seedTrackedChanges(projectId: string): void {
 export async function listTrackedChanges(projectId: string): Promise<TrackedChange[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const rows = await TrackedChangeModel.find({ projectId }).sort({ createdAt: 1 });
     return rows.map(toTrackedChange);
   }
@@ -486,6 +587,7 @@ export async function listTrackedChanges(projectId: string): Promise<TrackedChan
 export async function acceptChange(changeId: string): Promise<void> {
   if (isRealId(changeId)) {
     await getDb();
+    await requireProjectAccess(await projectIdForChange(changeId));
     await TrackedChangeModel.updateOne({ _id: changeId }, { status: "accepted" });
     return;
   }
@@ -497,6 +599,7 @@ export async function acceptChange(changeId: string): Promise<void> {
 export async function rejectChange(changeId: string): Promise<void> {
   if (isRealId(changeId)) {
     await getDb();
+    await requireProjectAccess(await projectIdForChange(changeId));
     await TrackedChangeModel.updateOne({ _id: changeId }, { status: "rejected" });
     return;
   }
@@ -508,6 +611,7 @@ export async function rejectChange(changeId: string): Promise<void> {
 export async function acceptAllByUser(projectId: string, userId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     await TrackedChangeModel.updateMany({ projectId, authorId: userId, status: "pending" }, { status: "accepted" });
     return;
   }
@@ -522,6 +626,7 @@ export async function acceptAllByUser(projectId: string, userId: string): Promis
 export async function rejectAllByUser(projectId: string, userId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     await TrackedChangeModel.updateMany({ projectId, authorId: userId, status: "pending" }, { status: "rejected" });
     return;
   }
@@ -536,6 +641,7 @@ export async function rejectAllByUser(projectId: string, userId: string): Promis
 export async function acceptAllChanges(projectId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     await TrackedChangeModel.updateMany({ projectId, status: "pending" }, { status: "accepted" });
     return;
   }
@@ -548,6 +654,7 @@ export async function acceptAllChanges(projectId: string): Promise<void> {
 export async function rejectAllChanges(projectId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     await TrackedChangeModel.updateMany({ projectId, status: "pending" }, { status: "rejected" });
     return;
   }
@@ -595,6 +702,7 @@ function seedChat(projectId: string): void {
 export async function listChatMessages(projectId: string): Promise<ChatMessage[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const rows = await ChatMessageModel.find({ projectId }).sort({ createdAt: 1 });
     return rows.map(toChatMessage);
   }
@@ -614,7 +722,7 @@ export async function sendChatMessage(
 ): Promise<ChatMessage> {
   if (isRealId(projectId)) {
     await getDb();
-    const authorId = await requireUserId();
+    const authorId = await requireProjectAccess(projectId);
     const created = await ChatMessageModel.create({ projectId, authorId, text, mentions } as never);
     return toChatMessage(created);
   }
@@ -641,6 +749,7 @@ export async function listCollaborators(
 ): Promise<Array<Collaborator & { user: User }>> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const project = await ProjectModel.findById(projectId).select("ownerId createdAt");
     if (!project) return [];
     const rows = await CollaboratorModel.find({ projectId });
@@ -703,6 +812,9 @@ export async function inviteCollaborator(
 ): Promise<Collaborator> {
   if (isRealId(projectId)) {
     await getDb();
+    // Owner-only: inviting is collaborator management, same bucket as
+    // role changes/removal/ownership transfer below.
+    await requireProjectAccess(projectId, "owner");
     const project = await ProjectModel.findById(projectId).select("ownerId");
     if (!project) throw new Error(`Project not found: ${projectId}`);
 
@@ -815,6 +927,18 @@ export async function updateCollaboratorRole(
 ): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    // SECURITY FIX: this used to accept whatever {projectId, userId, role}
+    // the client sent with no check at all — any signed-in collaborator
+    // (including a "viewer") could promote/demote *any other* collaborator,
+    // which is exactly the privilege-escalation bug this fix closes.
+    await requireProjectAccess(projectId, "owner");
+    // "owner" isn't a role a collaborator row can hold (the owner is
+    // tracked on the project itself, see transferOwnership) — routing a
+    // grant of it through here instead of transferOwnership would leave the
+    // project with two "owners" and an inconsistent ProjectModel.ownerId.
+    if (role === "owner") {
+      throw new Error("Use transferOwnership to make someone else the owner.");
+    }
     await CollaboratorModel.updateOne({ projectId, userId }, { role });
     return;
   }
@@ -828,6 +952,11 @@ export async function updateCollaboratorRole(
 export async function removeCollaborator(projectId: string, userId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    // SECURITY FIX: same missing check as updateCollaboratorRole — any
+    // collaborator could remove any other collaborator. Fixed the same way,
+    // except a user removing *themselves* (leaving the project) is always
+    // allowed regardless of role — see requireOwnerOrSelf's own comment.
+    await requireOwnerOrSelf(projectId, userId);
     await CollaboratorModel.deleteOne({ projectId, userId });
     return;
   }
@@ -840,8 +969,16 @@ export async function removeCollaborator(projectId: string, userId: string): Pro
 export async function transferOwnership(projectId: string, newOwnerId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    const callerId = await requireUserId();
     const project = await ProjectModel.findById(projectId).select("ownerId");
     if (!project) return;
+    // SECURITY FIX: this used to let *any* caller reassign ownership of any
+    // project to anyone — the most severe instance of the missing-check bug,
+    // since it hands over full control including the ability to remove the
+    // real owner afterward. Only the current owner may transfer.
+    if (String(project.ownerId) !== callerId) {
+      throw new Error("Not authorized: only the project owner can transfer ownership");
+    }
     const previousOwnerId = String(project.ownerId);
     if (previousOwnerId === newOwnerId) return;
 
@@ -899,6 +1036,12 @@ export async function setProjectVisibility(
 ): Promise<{ publicReadOnlyLink: string | null }> {
   if (isRealId(projectId)) {
     await getDb();
+    // Owner-only, same bucket as invite/role-change/remove/transfer: this
+    // toggles whether the whole project is publicly reachable, which is a
+    // project-wide exposure decision, not routine collaborator activity.
+    // (The Share dialog's public-access Switch had no isOwner gate either —
+    // same UI bug class as the role dropdown — fixed alongside it.)
+    await requireProjectAccess(projectId, "owner");
     const project = await ProjectModel.findById(projectId).select("visibility publicReadOnlyLink");
     if (!project) return { publicReadOnlyLink: null };
     project.visibility = visibility;

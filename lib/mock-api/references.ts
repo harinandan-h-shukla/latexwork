@@ -100,7 +100,44 @@ export async function getReferencesFile(projectId: string): Promise<ProjectFile>
     }
     // First time this project's references have been touched — give it
     // its own empty bib file instead of throwing.
-    return createFile(projectId, { parentId: null, type: "file", name: "references.bib" });
+    //
+    // This lookup-then-create isn't atomic, and ProjectFileSchema has a
+    // unique index on {projectId, path} (lib/db/models/project.ts). Two
+    // requests racing here (e.g. a template/zip/URL/GitHub-imported project
+    // with no .bib file, opened in two tabs, or a Next.js <Link>
+    // hover-prefetch of /references landing at nearly the same time as the
+    // real navigation) both see "no existing .bib" and both call createFile,
+    // so the loser gets a duplicate-key error and the References tab 500s.
+    // Forced deterministically with an artificial delay inserted before this
+    // point (removed again after confirming the fix) plus several
+    // concurrent requests; not reproducible under normal timing against
+    // local in-memory MongoDB, where these calls resolve too close together
+    // to collide — real network latency (e.g. Atlas in production) is what
+    // opens the window in practice. Rather than making file creation atomic
+    // (a files.ts change), treat losing the race as "someone else already
+    // created it" and re-read instead of failing the request.
+    //
+    // NOTE: seedRealProjectDefaults() in lib/mock-api/files.ts (called from
+    // listFiles(), which this function calls just above) has the same
+    // check-then-create shape against the same unique index, for every new
+    // project's default main.tex/refs.bib — and is reachable by any two
+    // concurrent listFiles() callers, not just References. That's a more
+    // general instance of this same race and a plausible cause of the
+    // "POST /projects/:id/references -> 500" seen on a real production
+    // walkthrough (production redacts the stack trace, so which exact insert
+    // collided couldn't be confirmed there). Left unfixed here since it's in
+    // files.ts, which another change in this repo is actively touching.
+    try {
+      return await createFile(projectId, { parentId: null, type: "file", name: "references.bib" });
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === "object" && error !== null && "code" in error && (error as { code?: number }).code === 11000;
+      if (!isDuplicateKey) throw error;
+      const retryFiles = await listFiles(projectId);
+      const created = retryFiles.find((f) => f.type === "file" && f.name.toLowerCase().endsWith(".bib"));
+      if (!created) throw error;
+      return created;
+    }
   }
 
   // This is on the dashboard's hot path (called once per project to build

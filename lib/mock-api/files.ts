@@ -13,7 +13,8 @@
 import type { ProjectFile } from "@/lib/types";
 import { delay, id, mockDb } from "@/lib/mock-api/db";
 import { getDb } from "@/lib/db/mongoose";
-import { ProjectFileModel, ProjectModel, type ProjectFileDoc } from "@/lib/db/models/project";
+import { ProjectFileModel, ProjectModel, CollaboratorModel, type ProjectFileDoc } from "@/lib/db/models/project";
+import { requireUserId } from "@/lib/db/require-user";
 import { uploadBinaryFile } from "@/lib/storage/blob-storage";
 import { decryptFileContent } from "@/lib/crypto/file-encryption";
 import type { HydratedDocument } from "mongoose";
@@ -21,6 +22,61 @@ import type { HydratedDocument } from "mongoose";
 const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
 function isRealId(value: string): boolean {
   return OBJECT_ID_RE.test(value);
+}
+
+// ---------------------------------------------------------------------------
+// Authorization (real-Mongo projects only — the legacy in-memory demo path
+// has no session and was never reachable by anyone but the local mock user).
+//
+// SECURITY FIX: every export in this file used to trust whatever
+// project/file id the client sent, with no check that the calling user had
+// any relationship to that project at all. Concretely, any signed-in user
+// who knew (or guessed) a real project's Mongo ObjectId could list its
+// files, read file content, or create/edit files in it — regardless of
+// whether they were a collaborator, or even the owner. Every function below
+// now verifies access first, via the same
+// ProjectModel.ownerId / CollaboratorModel.exists({ projectId, userId })
+// query shape already used correctly in lib/mock-api/projects.ts and in the
+// matching fix in lib/mock-api/collaboration.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * Owner OR any collaborator row (any of editor/reviewer/viewer) may read or
+ * write project files. There's no existing precedent anywhere in this
+ * codebase for a finer split (e.g. making the editor read-only for
+ * reviewer/viewer), so this fix only closes the "no relationship to the
+ * project at all" hole rather than inventing a new permission tier.
+ */
+async function requireProjectAccess(projectId: string): Promise<void> {
+  const userId = await requireUserId();
+  const project = await ProjectModel.findById(projectId).select("ownerId");
+  if (!project) throw new Error("Project not found");
+  if (String(project.ownerId) === userId) return;
+  const isCollaborator = await CollaboratorModel.exists({ projectId, userId });
+  if (!isCollaborator) {
+    throw new Error("Not authorized: you don't have access to this project");
+  }
+}
+
+/**
+ * Same check for a batch of file ids (bulk delete/move/download): confirms
+ * every id actually belongs to one single project, then verifies access to
+ * that project. Rejecting mixed-project batches also closes a smuggling
+ * angle the old code had — it derived "the" project from fileIds[0] alone
+ * and then trusted the rest of the array, so a caller with access to their
+ * own project could mix in file ids from a project they don't have access
+ * to and have them silently included in the same delete/move/download.
+ */
+async function requireSameProjectAccess(fileIds: string[]): Promise<string | null> {
+  if (fileIds.length === 0) return null;
+  const docs = await ProjectFileModel.find({ _id: { $in: fileIds } }).select("projectId");
+  if (docs.length === 0) return null;
+  const projectId = String(docs[0].projectId);
+  if (docs.some((d) => String(d.projectId) !== projectId)) {
+    throw new Error("Files must all belong to the same project");
+  }
+  await requireProjectAccess(projectId);
+  return projectId;
 }
 
 function toProjectFile(doc: HydratedDocument<ProjectFileDoc>): ProjectFile {
@@ -165,6 +221,7 @@ export interface ZipImportEntry {
 /** Always real-Mongo — every caller (zip upload, template population) always has a real project id. */
 export async function importZipTree(projectId: string, entries: ZipImportEntry[]): Promise<ProjectFile[]> {
   await getDb();
+  await requireProjectAccess(projectId);
   const created: HydratedDocument<ProjectFileDoc>[] = [];
   const folderIdByPath = new Map<string, string>();
 
@@ -260,6 +317,7 @@ export async function ensureProjectFilesSeeded(projectId: string): Promise<void>
 export async function listFiles(projectId: string): Promise<ProjectFile[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     await seedRealProjectDefaults(projectId);
     const docs = await ProjectFileModel.find({ projectId });
     return docs
@@ -281,6 +339,7 @@ export async function getFile(fileId: string): Promise<ProjectFile> {
     await getDb();
     const doc = await ProjectFileModel.findById(fileId);
     if (!doc) throw new Error("File not found");
+    await requireProjectAccess(String(doc.projectId));
     return toProjectFile(doc);
   }
   await delay(150);
@@ -299,8 +358,10 @@ export async function getFileContent(fileId: string): Promise<string> {
     // corrupted-or-wrong-key row must surface as a real, visible error
     // here instead of silently looking like "this file is empty" and
     // letting something downstream persist that "" as if it were real.
-    const doc = await ProjectFileModel.findById(fileId).select("content").lean();
-    if (!doc || doc.content == null) return "";
+    const doc = await ProjectFileModel.findById(fileId).select("projectId content").lean();
+    if (!doc) return "";
+    await requireProjectAccess(String(doc.projectId));
+    if (doc.content == null) return "";
     return decryptFileContent(doc.content);
   }
   await delay(150);
@@ -317,6 +378,7 @@ export interface CreateFileInput {
 export async function createFile(projectId: string, input: CreateFileInput): Promise<ProjectFile> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const path = await realPathFor(input.parentId, input.name);
     const doc = await ProjectFileModel.create({
       projectId,
@@ -356,6 +418,7 @@ export async function renameFile(fileId: string, name: string): Promise<ProjectF
     await getDb();
     const doc = await ProjectFileModel.findById(fileId);
     if (!doc) throw new Error("File not found");
+    await requireProjectAccess(String(doc.projectId));
     doc.name = name;
     doc.path = await realPathFor(doc.parentId ? String(doc.parentId) : null, name);
     await doc.save();
@@ -408,6 +471,7 @@ export async function deleteFile(fileId: string): Promise<void> {
     await getDb();
     const doc = await ProjectFileModel.findById(fileId).select("projectId");
     if (!doc) return;
+    await requireProjectAccess(String(doc.projectId));
     const toDelete = await collectWithDescendantsReal(String(doc.projectId), [fileId]);
     await ProjectFileModel.deleteMany({ _id: { $in: Array.from(toDelete) } });
     return;
@@ -420,9 +484,9 @@ export async function deleteFile(fileId: string): Promise<void> {
 export async function bulkDeleteFiles(fileIds: string[]): Promise<string[]> {
   if (fileIds.length > 0 && isRealId(fileIds[0])) {
     await getDb();
-    const first = await ProjectFileModel.findById(fileIds[0]).select("projectId");
-    if (!first) return [];
-    const toDelete = await collectWithDescendantsReal(String(first.projectId), fileIds);
+    const projectId = await requireSameProjectAccess(fileIds);
+    if (!projectId) return [];
+    const toDelete = await collectWithDescendantsReal(projectId, fileIds);
     await ProjectFileModel.deleteMany({ _id: { $in: Array.from(toDelete) } });
     return Array.from(toDelete);
   }
@@ -437,6 +501,7 @@ export async function moveFile(fileId: string, newParentId: string | null): Prom
     await getDb();
     const doc = await ProjectFileModel.findById(fileId);
     if (!doc) throw new Error("File not found");
+    await requireProjectAccess(String(doc.projectId));
     doc.parentId = newParentId as never;
     doc.path = await realPathFor(newParentId, doc.name);
     await doc.save();
@@ -455,6 +520,7 @@ export async function moveFile(fileId: string, newParentId: string | null): Prom
 export async function bulkMoveFiles(fileIds: string[], newParentId: string | null): Promise<ProjectFile[]> {
   if (fileIds.length > 0 && isRealId(fileIds[0])) {
     await getDb();
+    await requireSameProjectAccess(fileIds);
     const moved: ProjectFile[] = [];
     for (const fileId of fileIds) {
       const doc = await ProjectFileModel.findById(fileId);
@@ -485,6 +551,7 @@ export async function duplicateFile(fileId: string): Promise<ProjectFile> {
     await getDb();
     const file = await ProjectFileModel.findById(fileId);
     if (!file) throw new Error("File not found");
+    await requireProjectAccess(String(file.projectId));
     const copyName = file.name.includes(".")
       ? file.name.replace(/(\.[^.]+)$/, " copy$1")
       : `${file.name} copy`;
@@ -525,6 +592,9 @@ export async function duplicateFile(fileId: string): Promise<ProjectFile> {
 export async function updateFileContent(fileId: string, content: string): Promise<void> {
   if (isRealId(fileId)) {
     await getDb();
+    const doc = await ProjectFileModel.findById(fileId).select("projectId");
+    if (!doc) return;
+    await requireProjectAccess(String(doc.projectId));
     await ProjectFileModel.updateOne({ _id: fileId }, { content, sizeBytes: content.length });
     return;
   }
@@ -539,6 +609,13 @@ export async function updateFileContent(fileId: string, content: string): Promis
 export async function setMainFile(projectId: string, fileId: string): Promise<void> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
+    // Confirm fileId is actually inside this project — otherwise a caller
+    // with access to their own project could point another project's file
+    // at isMain:true (a cross-project data-integrity slip, not just an
+    // auth gap) by passing a foreign file id here.
+    const belongsToProject = await ProjectFileModel.exists({ _id: fileId, projectId } as never);
+    if (!belongsToProject) throw new Error("That file doesn't belong to this project.");
     await ProjectFileModel.updateMany({ projectId }, { isMain: false });
     await ProjectFileModel.updateOne({ _id: fileId }, { isMain: true });
     await ProjectModel.updateOne({ _id: projectId }, { "settings.mainFileId": fileId });
@@ -560,6 +637,9 @@ export async function setMainFile(projectId: string, fileId: string): Promise<vo
 export async function setFolderMainFile(folderId: string, fileId: string): Promise<void> {
   if (isRealId(folderId)) {
     await getDb();
+    const folder = await ProjectFileModel.findById(folderId).select("projectId");
+    if (!folder) throw new Error("Folder not found");
+    await requireProjectAccess(String(folder.projectId));
     const child = await ProjectFileModel.exists({ _id: fileId, parentId: folderId } as never);
     if (!child) throw new Error("That file isn't directly inside this folder.");
     await ProjectFileModel.updateOne({ _id: folderId }, { folderMainFileId: fileId });
@@ -587,6 +667,7 @@ export interface UploadFileInput {
 export async function uploadFiles(projectId: string, files: UploadFileInput[]): Promise<ProjectFile[]> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const created: ProjectFile[] = [];
     for (const f of files) {
       const path = await realPathFor(f.parentId, f.name);
@@ -642,6 +723,7 @@ export async function downloadFile(fileId: string): Promise<{ filename: string; 
     await getDb();
     const doc = await ProjectFileModel.findById(fileId);
     if (!doc) throw new Error("File not found");
+    await requireProjectAccess(String(doc.projectId));
     return { filename: doc.name, content: doc.content ?? "" };
   }
   await delay(200);
@@ -653,6 +735,7 @@ export async function downloadFile(fileId: string): Promise<{ filename: string; 
 export async function downloadFiles(fileIds: string[]): Promise<{ filename: string; content: string }> {
   if (fileIds.length > 0 && isRealId(fileIds[0])) {
     await getDb();
+    await requireSameProjectAccess(fileIds);
     const docs = await ProjectFileModel.find({ _id: { $in: fileIds }, type: "file" });
     const content = docs.map((f) => `${f.path}\n${f.content ?? "[binary]"}\n`).join("\n---\n");
     return { filename: "selected-files.txt", content };
@@ -668,6 +751,7 @@ export async function downloadFiles(fileIds: string[]): Promise<{ filename: stri
 export async function downloadProjectManifest(projectId: string): Promise<{ filename: string; content: string }> {
   if (isRealId(projectId)) {
     await getDb();
+    await requireProjectAccess(projectId);
     const [docs, project] = await Promise.all([
       ProjectFileModel.find({ projectId, type: "file" }),
       ProjectModel.findById(projectId).select("name"),

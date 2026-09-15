@@ -13,9 +13,9 @@ import { NewProjectImport } from "@/components/projects/new-project-import";
 export function NewProjectFlow() {
   const router = useRouter();
 
-  function handleCreated() {
+  function handleCreated(projectId: string) {
     toast.success("Project created");
-    router.push("/projects");
+    router.push(`/projects/${projectId}`);
   }
 
   return (
