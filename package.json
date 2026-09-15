@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "local-mongo": "node scripts/local-mongo.mjs",
-    "download-compiler-assets": "texlyre-busytex download-assets ./public/core"
+    "download-compiler-assets": "texlyre-busytex download-assets ./public/core",
+    "upload-compiler-assets": "node scripts/upload-compiler-assets.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

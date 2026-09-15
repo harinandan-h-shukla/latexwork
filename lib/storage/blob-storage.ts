@@ -54,6 +54,12 @@ export async function getBinaryFileStream(
   const token = requireToken();
   const result = await get(pathname, { access: "private", token });
   if (!result || result.statusCode !== 200) return null;
+  // Deliberately not exposing result.blob.size here — confirmed by a real
+  // repro that this SDK version reports it as 0 even when the stream
+  // itself carries the full byte count. A caller that trusted it to set
+  // Content-Length would make every client truncate the response to zero
+  // bytes (Content-Length is authoritative over the actual body) — see
+  // app/core/busytex/[...path]/route.ts's own comment for the full story.
   return { stream: result.stream, contentType: result.blob.contentType };
 }
 

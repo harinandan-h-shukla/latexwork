@@ -25,6 +25,24 @@ import { FileMenu } from "@/components/workspace/file-menu";
 
 const AUTO_COMPILE_DEBOUNCE_MS = 500;
 
+// loadProject() resets dirtyFileIds to a brand-new empty Set on every
+// project (re)load — including a plain page reload, not just switching
+// projects — so comparing by reference (state.dirtyFileIds !== prevState.
+// dirtyFileIds below) treats "new empty Set replacing old empty Set" as a
+// real dirty-state change and fires an unwanted auto-compile ~500ms after
+// every project open, with no actual edit involved. Confirmed live: this
+// raced against a real user-triggered compile, and the two cancelled each
+// other out via runCompile's cancel-if-already-in-flight check, leaving
+// the toolbar stuck showing "Compiling" forever. Comparing contents (size
+// + membership) instead of reference fixes it while still catching every
+// real addition/removal from setFileContent/saveFileContent.
+function dirtySetsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
+
 const STEPS: { key: "queued" | "running" | "done"; label: string }[] = [
   { key: "queued", label: "Queued" },
   { key: "running", label: "Compiling" },
@@ -136,7 +154,7 @@ export function CompileToolbar() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = useWorkspaceStore.subscribe((state, prevState) => {
-      if (state.dirtyFileIds === prevState.dirtyFileIds) return;
+      if (dirtySetsEqual(state.dirtyFileIds, prevState.dirtyFileIds)) return;
       if (!autoCompileRef.current) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {

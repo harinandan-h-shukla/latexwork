@@ -2,11 +2,23 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
-import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
+import { Annotation, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { StreamLanguage, LanguageSupport, StreamParser } from "@codemirror/language";
 import { stex as stexParser } from "@codemirror/legacy-modes/mode/stex";
 import { keymap, type Command } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
+
+// Tags a dispatch as "not a real user edit" — the sync effect below
+// (fileId/value) replaces the whole document to reflect a cache-then-real-
+// fetch content swap, not a keystroke. Without this, that dispatch's
+// docChanged still fires the updateListener below the same as any typed
+// change, which calls onChange -> setFileContent -> marks the file dirty,
+// which (with auto-compile on, the default) fires an unwanted compile
+// ~500ms after every file open — confirmed live via a real end-to-end
+// compile test: opening a fresh project raced a real user-triggered
+// compile against this phantom auto-compile, and the two cancelled each
+// other out, leaving the compile toolbar stuck showing "Compiling" forever.
+const externalSync = Annotation.define<boolean>();
 
 const stexLanguage = StreamLanguage.define(stexParser as StreamParser<unknown>);
 const stexSupport = new LanguageSupport(stexLanguage, [
@@ -102,7 +114,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         // switching files does.
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
+          if (update.docChanged && !update.transactions.some((tr) => tr.annotation(externalSync))) {
             onChangeRef.current(update.state.doc.toString());
           }
         }),
@@ -148,6 +160,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         selection: {
           anchor: Math.min(view.state.selection.main.anchor, value.length),
         },
+        annotations: externalSync.of(true),
       });
     }
   }, [fileId, value]);
