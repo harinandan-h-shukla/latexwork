@@ -4,15 +4,15 @@
   "version": "0.1.0",
   "identifier": "com.inkwell.desktop",
   "build": {
-    "devUrl": "http://localhost:3000",
-    "frontendDist": "http://localhost:3000"
+    "devUrl": "https://latexwork.vercel.app",
+    "frontendDist": "https://latexwork.vercel.app"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
         "title": "Inkwell",
-        "url": "http://localhost:3000",
+        "url": "https://latexwork.vercel.app",
         "width": 1280,
         "height": 800
       }

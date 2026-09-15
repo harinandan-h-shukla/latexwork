@@ -39,9 +39,12 @@ separately for local compiling to work (see the main repo's
 `app/settings/local-compiler-setup` guide) — the desktop app doesn't manage
 its lifecycle yet (see "Known gaps" below).
 
-By default this points at `http://localhost:3000` (your local dev server).
-To point it at the real deployed site instead, edit
-`src-tauri/tauri.conf.json`'s `build.devUrl` and `app.windows[0].url`.
+By default this points at the real deployed site
+(`https://latexwork.vercel.app`), so it works out of the box with no local
+Next.js dev server running. To point it at a local dev server instead (for
+testing changes to the web app itself), edit `src-tauri/tauri.conf.json`'s
+`build.devUrl` and `app.windows[0].url` back to `http://localhost:3000` and
+run `npm run dev` in the repo root first.
 
 ### If `libwebkit2gtk-4.1-dev` isn't available for your distro
 
