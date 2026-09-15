@@ -5,6 +5,9 @@ import Link from "next/link";
 import {
   AlertTriangleIcon,
   CheckIcon,
+  CloudIcon,
+  GlobeIcon,
+  LaptopIcon,
   Loader2Icon,
   PlayIcon,
   RotateCcwIcon,
@@ -17,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { CompileStatus } from "@/lib/types";
+import type { CompileSource, CompileStatus } from "@/lib/types";
 import type { CompileOptions } from "@/lib/mock-api/compile";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useUiStore } from "@/store/ui-store";
@@ -88,6 +91,49 @@ function StatusStepper({ status }: { status?: CompileStatus }) {
         );
       })}
     </div>
+  );
+}
+
+const SOURCE_META: Record<CompileSource, { icon: typeof LaptopIcon; label: string; title: string; className: string }> = {
+  local: {
+    icon: LaptopIcon,
+    label: "My computer",
+    title: "Compiled by local-agent running on this machine.",
+    className: "text-emerald-600 dark:text-emerald-500",
+  },
+  browser: {
+    icon: GlobeIcon,
+    label: "This browser",
+    title:
+      "Compiled entirely in this browser tab. On a deployed site, \"My computer\" can't be reached from here " +
+      "(browsers block a public page from reaching localhost, for your own security) — this is the automatic, " +
+      "working fallback, not an error.",
+    className: "text-fuchsia-600 dark:text-fuchsia-500",
+  },
+  cloud: {
+    icon: CloudIcon,
+    label: "The cloud",
+    title: "Compiled by Inkwell's cloud compile service.",
+    className: "text-sky-600 dark:text-sky-500",
+  },
+};
+
+/** Quiet, always-visible indicator of which engine actually ran the current
+ * compile — added after a real user report of confusion about why "my
+ * computer" silently didn't run on the deployed site (expected: a public
+ * page can't reach localhost at all, so it falls back to the browser
+ * engine automatically). A tooltip explains the fallback instead of
+ * leaving it silent, without interrupting the compile flow with a toast
+ * or dialog. */
+function SourceIndicator({ source }: { source?: CompileSource }) {
+  if (!source) return null;
+  const meta = SOURCE_META[source];
+  const Icon = meta.icon;
+  return (
+    <span title={meta.title} className={cn("flex items-center gap-1 text-[10px]", meta.className)}>
+      <Icon className="size-3" />
+      {meta.label}
+    </span>
   );
 }
 
@@ -218,6 +264,7 @@ export function CompileToolbar() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <SourceIndicator source={compile?.source} />
           <StatusStepper status={status} />
           {status === "queued" && (
             <Badge variant="secondary" className="gap-1">
