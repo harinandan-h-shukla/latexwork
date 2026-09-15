@@ -49,5 +49,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# docs/planning files — kept locally, not pushed
+# docs/planning files — kept locally, not pushed. This blanket rule was also
+# silently excluding real user-facing READMEs (the root README.md,
+# local-agent/README.md) — worth a deliberate decision on whether those
+# should be public too, flagged separately. desktop/README.md is carved out
+# here since it's the actual install guide for a new, real subproject.
 *.md
+!desktop/README.md

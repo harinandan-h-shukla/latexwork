@@ -28,6 +28,8 @@ const eslintConfig = defineConfig([
     // separate standalone package with its own tsconfig/lint, never bundled by Next.js.
     "local-agent/**",
     "cloud-compiler/**",
+    "realtime-hub/**",
+    "desktop/**",
   ]),
 ]);
 

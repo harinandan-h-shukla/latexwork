@@ -25,6 +25,7 @@ import { ProjectModel, CollaboratorModel } from "@/lib/db/models/project";
 import { UserModel } from "@/lib/db/models/user";
 import { toUser } from "@/lib/db/user-mapper";
 import { requireUserId } from "@/lib/db/require-user";
+import { broadcastProjectChange } from "@/lib/realtime/broadcast";
 import {
   CommentModel,
   TrackedChangeModel,
@@ -42,6 +43,17 @@ import type { HydratedDocument, Types } from "mongoose";
 const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
 function isRealId(value: string): boolean {
   return OBJECT_ID_RE.test(value);
+}
+
+// Async wrapper around isRealId(), because this file has "use server" at the
+// top and Next.js only allows a Server Action module to export async
+// functions — a plain sync export fails the build ("Server Actions must be
+// async functions"). lib/realtime/actions.ts reuses this (rather than
+// re-deriving the real-vs-mock-project regex) to refuse minting a realtime
+// subscribe token for legacy mock/demo projects, which never broadcast (see
+// sendChatMessage below).
+export async function isRealProjectId(value: string): Promise<boolean> {
+  return isRealId(value);
 }
 
 /** Total people who can work on one project, owner included — the cap the
@@ -91,8 +103,13 @@ const MAX_COLLABORATORS_PER_PROJECT = 10;
  *   able to manage sharing, only the owner is — there's no existing
  *   precedent in this codebase suggesting collaborator management should be
  *   delegated below owner.
+ *
+ * Exported so lib/realtime/actions.ts's mintRealtimeToken() can reuse this
+ * exact check (owner-or-any-collaborator) before minting a realtime-hub
+ * subscribe token, instead of writing a second access check that could
+ * drift from this one.
  */
-async function requireProjectAccess(
+export async function requireProjectAccess(
   projectId: string,
   minRole: "owner" | "collaborator" = "collaborator"
 ): Promise<string> {
@@ -724,6 +741,11 @@ export async function sendChatMessage(
     await getDb();
     const authorId = await requireProjectAccess(projectId);
     const created = await ChatMessageModel.create({ projectId, authorId, text, mentions } as never);
+    // Best-effort "something changed" push to realtime-hub so subscribed
+    // clients refetch this chat list live (Spike B). Never let a hub outage
+    // or missing config break the actual send — the Mongo write above
+    // already succeeded, which is what matters; the push is pure sugar.
+    broadcastProjectChange(projectId, { type: "chat-message" }).catch(() => {});
     return toChatMessage(created);
   }
 
