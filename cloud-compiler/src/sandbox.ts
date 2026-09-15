@@ -54,10 +54,23 @@ export function sandboxCommand(
 
   const bwrapArgs = [
     "--ro-bind", "/", "/",
-    "--bind", workDir, workDir,
     "--dev", "/dev",
     "--proc", "/proc",
+    // Real bug, found via a direct repro on the deployed machine: bwrap
+    // applies mount operations in argument order, and a later mount at a
+    // path wins over ("shadows") an earlier one at a path nested inside it.
+    // workDir is always under the OS temp dir (see config.ts's default,
+    // os.tmpdir() + "inkwell-cloud-compiler-work") — i.e. nested under
+    // /tmp. With --tmpfs /tmp listed AFTER --bind workDir workDir (the
+    // order this used to be in), the fresh empty /tmp mount silently wiped
+    // out the just-bound work directory, so every single compile failed
+    // immediately with "bwrap: Can't chdir to <workDir>: No such file or
+    // directory" — before pdflatex ever ran. --tmpfs /tmp must come first
+    // so the more specific --bind workDir workDir underneath it applies on
+    // top, giving the sandboxed process a fresh empty /tmp everywhere
+    // except the one real, populated subdirectory it actually needs.
     "--tmpfs", "/tmp",
+    "--bind", workDir, workDir,
     "--unshare-net",
     "--unshare-pid",
     "--die-with-parent",

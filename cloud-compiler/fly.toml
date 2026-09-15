@@ -14,9 +14,16 @@ primary_region = "iad"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = false
+  # Pay-per-use, not always-on: the machine stops when idle (no charge while
+  # nobody's compiling) and Fly starts it fresh on the next request. Costs a
+  # few seconds of cold-start latency on the first compile after an idle
+  # period, in exchange for not paying 24/7 for a service most users will
+  # only hit occasionally (local-agent is the fast, always-available path;
+  # this cloud service is deliberately the "sharing/no local setup" fallback,
+  # not the primary compile path).
+  auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [[http_service.checks]]
     grace_period = "10s"

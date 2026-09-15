@@ -18,7 +18,7 @@ import {
   type CompileOptions,
   type CreateFileInput,
 } from "@/lib/mock-api";
-import { cancelSmart, compileSmart, detectLocal, resolveCompileSource } from "@/lib/local-compiler/compiler-service";
+import { canFallBackToBrowser, cancelSmart, compileSmart, detectLocal, resolveCompileSource } from "@/lib/local-compiler/compiler-service";
 import type { LocalCompileFileInput } from "@/lib/local-compiler/types";
 import { cancelBrowserCompile, compileBrowser, isBrowserCompileSupported } from "@/lib/browser-compiler/browser-compiler-client";
 import { getCachedFileContent, setCachedFileContent } from "@/lib/local-cache/file-content-cache";
@@ -510,10 +510,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       // Both paths still return the same CompileResult shape, so nothing
       // downstream (PdfPreview, CompileToolbar, the log panel) needs to
       // know which one ran.
-      const result =
-        source === "browser"
-          ? await compileBrowser(compileParams, applyIfCurrent)
-          : await compileSmart(compileParams, source, applyIfCurrent);
+      let result: CompileResult;
+      if (source === "browser") {
+        result = await compileBrowser(compileParams, applyIfCurrent);
+      } else {
+        try {
+          result = await compileSmart(compileParams, source, applyIfCurrent);
+        } catch (err) {
+          // resolveCompileSource() now prefers "cloud" over "browser" as
+          // the no-local-agent fallback (see its own comment: the browser
+          // engine's fixed WASM memory ceiling can't hold every TeX Live
+          // package tier at once, the real cloud compiler has no such
+          // limit) — but an environment that hasn't configured
+          // CLOUD_COMPILER_URL/SECRET yet would otherwise turn every
+          // compile into a hard error instead of the working browser
+          // fallback that used to run in that slot. Only retry for that
+          // one specific, detectable misconfiguration — a real compile
+          // failure (bad LaTeX, cloud service down mid-build) should still
+          // surface as-is, not silently swap engines and confuse the user
+          // about which one actually ran.
+          const isCloudNotConfigured =
+            source === "cloud" && err instanceof Error && err.message.includes("CLOUD_COMPILER_URL");
+          if (isCloudNotConfigured && canFallBackToBrowser(compiler, isBrowserCompileSupported())) {
+            result = await compileBrowser(compileParams, applyIfCurrent);
+          } else {
+            throw err;
+          }
+        }
+      }
 
       if (myRunId === compileRunId) {
         set({ compile: result, lastCompileMainFile: mainFilePath, isCompiling: false });

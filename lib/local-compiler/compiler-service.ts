@@ -89,12 +89,27 @@ export function resolveCompileSource(
     const match = agentInfo.compilers.find((c) => c.name === compiler);
     if (match?.available) return "local";
   }
-  // local-agent requires a whole separate install this session's owner has
-  // hit real friction with — the in-browser WASM engine needs nothing
-  // installed, so it's the preferred fallback ahead of "cloud" (which,
-  // unlike browser, isn't actually deployed anywhere real yet).
-  if (BROWSER_CAPABLE_COMPILERS.has(compiler) && browserSupported) return "browser";
+  // Cloud is preferred over the in-browser WASM engine as the fallback when
+  // local-agent isn't available: the browser engine's compiled WASM binary
+  // has a hard 576MB memory ceiling (confirmed by directly parsing its
+  // memory section — not a guess), which can't hold all three TeX Live
+  // package tiers at once, so any document needing packages split across
+  // tiers (a very common case — a real conference paper hit exactly this
+  // with `subfigure`/`silence`) fails outright. The real cloud-compiler
+  // service (cloud-compiler/, a genuine TeX Live install, no such ceiling)
+  // has none of that limitation and is now actually deployed. The browser
+  // engine still exists as a last-resort fallback below, in case
+  // CLOUD_COMPILER_URL/SECRET aren't configured in a given environment.
   return "cloud";
+}
+
+/** Whether the browser-WASM engine should be tried after a cloud attempt
+ * fails for a plain "not configured" reason (missing env vars) rather than
+ * a real compile error — see runCompile's catch handling in
+ * workspace-store.ts. Kept as a named export so that call site doesn't need
+ * to duplicate the BROWSER_CAPABLE_COMPILERS set. */
+export function canFallBackToBrowser(compiler: Compiler, browserSupported: boolean): boolean {
+  return BROWSER_CAPABLE_COMPILERS.has(compiler) && browserSupported;
 }
 
 export interface SmartCompileParams {

@@ -176,13 +176,29 @@ export default function LocalCompilerSetupPage() {
   const LOCALHOST_ORIGINS = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
   // local-agent only accepts connections from a fixed origin allow-list
   // (defaults to localhost:3000 only) — a real, previously-silent bug:
-  // testing from a deployed domain (not localhost) gets rejected by
-  // local-agent's CORS check with no visible error anywhere in this app,
-  // just "local compiler not detected." Detecting the current origin here
-  // lets the guide hand over the exact env var value needed instead of a
-  // placeholder the user has to figure out is even necessary.
+  // testing from a non-default local origin (a different port, or this
+  // machine's LAN IP/hostname) gets rejected by local-agent's CORS check
+  // with no visible error anywhere in this app, just "local compiler not
+  // detected." Detecting the current origin here lets the guide hand over
+  // the exact env var value needed instead of a placeholder the user has
+  // to figure out is even necessary.
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
-  const needsOriginConfig = currentOrigin !== "" && !LOCALHOST_ORIGINS.has(currentOrigin);
+  // A genuinely public origin (this deployed site, not a local/private
+  // one) can NEVER reach local-agent, full stop — confirmed by a real
+  // repro, not a guess: the browser's own Private Network Access policy
+  // blocks it outright ("Permission was denied for this request to access
+  // the loopback address space"), before local-agent's CORS check is even
+  // reached. No env var, no header, nothing on either side fixes this —
+  // it's a browser security boundary, the same one that stops any public
+  // website from probing services on a visitor's own machine or LAN. The
+  // origin-allowlist setting below only matters for a *private* local
+  // origin (a different port than 3000, or this machine's own LAN
+  // hostname/IP) — never for an origin reachable from the public internet.
+  const isPublicOrigin =
+    typeof window !== "undefined" &&
+    !["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+    !/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|\[?::1\]?$)/.test(window.location.hostname);
+  const needsOriginConfig = currentOrigin !== "" && !LOCALHOST_ORIGINS.has(currentOrigin) && !isPublicOrigin;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-10 sm:px-6">
