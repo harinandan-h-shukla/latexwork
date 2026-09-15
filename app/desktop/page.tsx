@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CopyableCommand } from "@/components/settings/copyable-command";
 
 const REPO_URL = "https://github.com/harinandan-h-shukla/latexwork";
-// Not merged into main yet (open as a PR) — link to the real branch it
-// lives on so this page's instructions actually work today, not a 404.
-const DESKTOP_BRANCH = "feature/desktop-hybrid";
-const CLONE_COMMAND = `git clone --branch ${DESKTOP_BRANCH} ${REPO_URL}.git && cd latexwork/desktop`;
+const CLONE_COMMAND = `git clone ${REPO_URL}.git && cd latexwork/desktop`;
 
 export default function DesktopAppPage() {
   return (
@@ -47,7 +44,7 @@ export default function DesktopAppPage() {
         <div className="flex flex-wrap gap-2">
           <Button
             nativeButton={false}
-            render={<a href={`${REPO_URL}/blob/${DESKTOP_BRANCH}/desktop/README.md`} target="_blank" rel="noreferrer" />}
+            render={<a href={`${REPO_URL}/blob/main/desktop/README.md`} target="_blank" rel="noreferrer" />}
             className="gap-1.5"
           >
             <ExternalLinkIcon className="size-4" />
@@ -56,7 +53,7 @@ export default function DesktopAppPage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<a href={`${REPO_URL}/tree/${DESKTOP_BRANCH}/desktop`} target="_blank" rel="noreferrer" />}
+            render={<a href={`${REPO_URL}/tree/main/desktop`} target="_blank" rel="noreferrer" />}
             className="gap-1.5"
           >
             <DownloadIcon className="size-4" />
