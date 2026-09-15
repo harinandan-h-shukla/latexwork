@@ -49,18 +49,52 @@ export async function uploadBinaryFile(
 }
 
 export async function getBinaryFileStream(
-  pathname: string
-): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string } | null> {
+  pathname: string,
+  // Forwarded verbatim as the upstream Range header — needed so large
+  // assets (the WASM compiler's 100-300MB+ TeX Live data files) can be
+  // fetched in small pieces instead of requiring one full-file transfer
+  // through a time-limited serverless function. See
+  // app/core/busytex/[...path]/route.ts for why this exists.
+  range?: string | null
+  // Typed as this minimal shape (not the DOM Headers type) because
+  // @vercel/blob returns undici's Headers here, which is structurally
+  // close enough for .get() but not assignable to the newer DOM Headers
+  // type this TS lib version expects (extra iterator methods it lacks).
+): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string; headers: { get(name: string): string | null } } | null> {
   const token = requireToken();
-  const result = await get(pathname, { access: "private", token });
+  const result = await get(pathname, {
+    access: "private",
+    token,
+    headers: {
+      // Vercel Blob's CDN Brotli-compresses full-file (unranged) responses
+      // by default, which drops Content-Length in favor of chunked
+      // transfer (confirmed by a real repro: same request with/without
+      // this header). These are already-compressed binary formats (wasm,
+      // pre-packed TeX Live .data archives) that gain nothing from an
+      // extra compression layer, and losing Content-Length broke the
+      // caller's ability to know the real file size up front — which
+      // matters here specifically because Emscripten's lazy-loading file
+      // reader (busytex.js) probes Content-Length via a HEAD/GET request
+      // before ever attempting Range requests, and silently falls back to
+      // downloading the entire file otherwise.
+      "Accept-Encoding": "identity",
+      ...(range ? { Range: range } : {}),
+    },
+  });
   if (!result || result.statusCode !== 200) return null;
   // Deliberately not exposing result.blob.size here — confirmed by a real
   // repro that this SDK version reports it as 0 even when the stream
   // itself carries the full byte count. A caller that trusted it to set
   // Content-Length would make every client truncate the response to zero
-  // bytes (Content-Length is authoritative over the actual body) — see
-  // app/core/busytex/[...path]/route.ts's own comment for the full story.
-  return { stream: result.stream, contentType: result.blob.contentType };
+  // bytes (Content-Length is authoritative over the actual body). The raw
+  // result.headers (the actual upstream response headers — accurate,
+  // unlike blob.size) is exposed instead: real Content-Length,
+  // Content-Range and Accept-Ranges when a Range request was honored.
+  // (result.statusCode is hardcoded to 200 by this SDK version even for a
+  // real 206 Partial Content upstream response — this is why the caller
+  // must check result.headers.get("content-range") itself to know which
+  // one actually happened, not statusCode.)
+  return { stream: result.stream, contentType: result.blob.contentType, headers: result.headers };
 }
 
 export async function deleteBinaryFile(pathname: string): Promise<void> {

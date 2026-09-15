@@ -22,7 +22,7 @@ export const maxDuration = 60;
 
 const BLOB_PREFIX = "compiler-assets/busytex-v1";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path: segments } = await params;
   // Reject traversal/absolute segments before building the blob pathname —
   // there's no legitimate reason a segment would contain "/" or "..".
@@ -31,23 +31,44 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
   }
   const filename = segments.join("/");
 
-  const result = await getBinaryFileStream(`${BLOB_PREFIX}/${filename}`);
+  // Real root cause of "File `microtype.sty' not found" persisting even
+  // after texlive-recommended/texlive-extra were registered as catalogs
+  // (see browser-compiler-client.ts): this route never advertised
+  // Accept-Ranges, so Emscripten's lazy-loading file reader (busytex.js's
+  // LazyUint8Array — checks the Accept-Ranges response header) fell back
+  // to downloading each *entire* data file (up to 326MB) in one request.
+  // That routinely exceeded this function's execution time budget and got
+  // killed mid-transfer, surfacing to the client as a generic
+  // "TypeError: network error" — confirmed via a real live repro, not
+  // guessed — after which the runtime silently falls back to only the
+  // packages it already had, i.e. exactly the original bug. Forwarding
+  // the real Range header lets the client fetch only the specific
+  // KB-sized pieces it actually needs, which comfortably finishes inside
+  // any reasonable function timeout.
+  const range = req.headers.get("range");
+  const result = await getBinaryFileStream(`${BLOB_PREFIX}/${filename}`, range);
   if (!result) {
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
 
+  // result.statusCode is hardcoded to 200 by this @vercel/blob version even
+  // when the upstream response was actually 206 Partial Content — the real
+  // signal is whether a Content-Range header came back.
+  const contentRange = result.headers.get("content-range");
+  const contentLength = result.headers.get("content-length");
+
   return new NextResponse(result.stream, {
+    status: contentRange ? 206 : 200,
     headers: {
       "Content-Type": result.contentType || "application/octet-stream",
-      // Deliberately NOT setting Content-Length from result.size: @vercel/
-      // blob's get() was confirmed (real repro, not a hunch) to report
-      // blob.size as 0 while the stream itself carries the full byte count
-      // correctly — setting Content-Length: 0 from that value made every
-      // client (curl, the browser) truncate the response to zero bytes,
-      // since Content-Length is authoritative over whatever the body
-      // actually contains. Omitting it lets Next stream this chunked
-      // instead, which is what actually worked in the real end-to-end
-      // compile test.
+      "Accept-Ranges": "bytes",
+      ...(contentRange ? { "Content-Range": contentRange } : {}),
+      // Safe here (unlike the unranged full-file case this used to try):
+      // this is the real length of THIS response body (the requested
+      // slice, or the true full size when no Range was requested), read
+      // from the actual upstream response headers rather than the known-
+      // unreliable blob.size metadata field.
+      ...(contentLength ? { "Content-Length": contentLength } : {}),
       // Immutable: pathname is versioned (busytex-v1/...) — a future
       // texlyre-busytex upgrade uploads under a new prefix rather than
       // overwriting these, so caching forever is safe.
