@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { DownloadIcon, FileArchiveIcon } from "lucide-react";
 import {
   ResizableHandle,
@@ -120,7 +121,13 @@ export function ProjectViewOnlyWorkspace({ projectId }: { projectId: string }) {
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
                 <p>No compiled PDF yet.</p>
-                <p>Install the desktop app to edit and compile this project.</p>
+                <p>
+                  Install the{" "}
+                  <Link href="/desktop" className="underline underline-offset-2 hover:text-foreground">
+                    desktop app
+                  </Link>{" "}
+                  to edit and compile this project.
+                </p>
               </div>
             )}
           </div>
