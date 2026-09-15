@@ -26,6 +26,7 @@ import { UserModel } from "@/lib/db/models/user";
 import { toUser } from "@/lib/db/user-mapper";
 import { requireUserId } from "@/lib/db/require-user";
 import { broadcastProjectChange } from "@/lib/realtime/broadcast";
+import { NotificationModel } from "@/lib/db/models/notifications";
 import {
   CommentModel,
   TrackedChangeModel,
@@ -940,6 +941,135 @@ export async function inviteCollaborator(
   };
   mockDb.collaborators.push(collaborator);
   return collaborator;
+}
+
+/**
+ * Real-projects-only invite flow: search-a-known-person (see searchUsers in
+ * lib/mock-api/users.ts) instead of typing an exact email, and no immediate
+ * access grant — the target gets a "share_invite" notification and must
+ * accept it (respondToInvite below) before a Collaborator row is created.
+ * Replaces inviteCollaborator() as the invite path the UI actually calls;
+ * inviteCollaborator() itself is left as-is (still used by legacy mock
+ * projects, which have no real users to search for).
+ */
+export async function sendCollaborationInvite(
+  projectId: string,
+  targetUserId: string,
+  role: Role
+): Promise<void> {
+  if (!isRealId(projectId)) {
+    throw new Error("Inviting by search is only available for real projects.");
+  }
+  await getDb();
+  const inviterId = await requireProjectAccess(projectId, "owner");
+  const project = await ProjectModel.findById(projectId).select("ownerId name");
+  if (!project) throw new Error(`Project not found: ${projectId}`);
+  if (String(project.ownerId) === targetUserId) {
+    throw new Error("This person already owns the project.");
+  }
+
+  const alreadyCollaborator = await CollaboratorModel.exists({ projectId, userId: targetUserId } as never);
+  if (alreadyCollaborator) {
+    throw new Error("This person is already a collaborator — change their role from the collaborator list instead.");
+  }
+
+  const collaboratorCount = await CollaboratorModel.countDocuments({ projectId });
+  // +1 for the owner, +1 for the person being invited right now — same cap
+  // reasoning as inviteCollaborator() above.
+  if (collaboratorCount + 2 > MAX_COLLABORATORS_PER_PROJECT) {
+    throw new Error(
+      `This project already has ${MAX_COLLABORATORS_PER_PROJECT} people (the maximum) — remove someone before inviting another.`
+    );
+  }
+
+  const existingPending = await NotificationModel.findOne({
+    userId: targetUserId,
+    projectId,
+    kind: "share_invite",
+    inviteStatus: "pending",
+  });
+  if (existingPending) {
+    throw new Error("This person already has a pending invite to this project.");
+  }
+
+  const [inviter, targetUser] = await Promise.all([
+    UserModel.findById(inviterId).select("name"),
+    UserModel.findById(targetUserId).select("name"),
+  ]);
+  if (!targetUser) throw new Error("User not found");
+
+  const roleLabel = role === "editor" ? "an editor" : `a ${role}`;
+  await NotificationModel.create({
+    userId: targetUserId,
+    kind: "share_invite",
+    projectId,
+    actorId: inviterId,
+    text: `${inviter?.name ?? "Someone"} invited you to collaborate on "${project.name}" as ${roleLabel}.`,
+    role,
+    inviteStatus: "pending",
+  } as never);
+}
+
+/** Accept or decline a pending "share_invite" notification (see
+ * sendCollaborationInvite above). Only the invited user may respond. */
+export async function respondToInvite(notificationId: string, accept: boolean): Promise<void> {
+  await getDb();
+  const userId = await requireUserId();
+  const notification = await NotificationModel.findById(notificationId);
+  if (!notification) throw new Error("Invite not found");
+  if (String(notification.userId) !== userId) {
+    throw new Error("Not authorized: this invite isn't addressed to you");
+  }
+  if (notification.kind !== "share_invite") {
+    throw new Error("This notification isn't an invite");
+  }
+  if (notification.inviteStatus !== "pending") {
+    throw new Error("This invite has already been responded to");
+  }
+  const projectId = notification.projectId ? String(notification.projectId) : null;
+  const role = notification.role as Role | undefined;
+  if (!projectId || !role) throw new Error("This invite is missing project/role information");
+
+  if (accept) {
+    const project = await ProjectModel.findById(projectId).select("ownerId name");
+    if (!project) throw new Error("Project not found");
+
+    const existing = await CollaboratorModel.findOne({ projectId, userId } as never);
+    if (existing) {
+      const existingDoc = existing as unknown as { role: Role; save: () => Promise<unknown> };
+      existingDoc.role = role;
+      await existingDoc.save();
+    } else {
+      const collaboratorCount = await CollaboratorModel.countDocuments({ projectId });
+      if (collaboratorCount + 1 > MAX_COLLABORATORS_PER_PROJECT) {
+        throw new Error(
+          `This project already has ${MAX_COLLABORATORS_PER_PROJECT} people (the maximum) — ask the owner to remove someone first.`
+        );
+      }
+      const acceptingUser = await UserModel.findById(userId).select("email");
+      await CollaboratorModel.create({
+        projectId,
+        userId,
+        role,
+        invitedEmail: acceptingUser?.email,
+      } as never);
+    }
+
+    if (notification.actorId) {
+      const acceptingUser = await UserModel.findById(userId).select("name");
+      await NotificationModel.create({
+        userId: String(notification.actorId),
+        kind: "collaborator_joined",
+        projectId,
+        actorId: userId,
+        text: `${acceptingUser?.name ?? "Someone"} accepted your invite and joined "${project.name}".`,
+      } as never);
+    }
+  }
+
+  notification.inviteStatus = accept ? "accepted" : "declined";
+  notification.read = true;
+  await notification.save();
 }
 
 export async function updateCollaboratorRole(

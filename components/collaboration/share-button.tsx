@@ -36,13 +36,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserAvatar } from "@/components/collaboration/user-avatar";
 import {
-  inviteCollaborator,
   listCollaborators,
   removeCollaborator,
+  sendCollaborationInvite,
   setProjectVisibility,
   transferOwnership,
   updateCollaboratorRole,
 } from "@/lib/mock-api/collaboration";
+import { searchUsers } from "@/lib/mock-api/users";
 import { getProject } from "@/lib/mock-api/projects";
 import { getCurrentUser } from "@/lib/mock-api/auth";
 import type { Collaborator, Role, User } from "@/lib/types";
@@ -68,7 +69,10 @@ export function ShareButton({ projectId }: { projectId: string }) {
 function ShareDialogBody({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [collaborators, setCollaborators] = useState<CollaboratorRow[]>([]);
-  const [email, setEmail] = useState("");
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>("editor");
   const [inviting, setInviting] = useState(false);
   const [visibility, setVisibility] = useState<"private" | "public">("private");
@@ -108,17 +112,51 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
   const publicLinkUrl = publicLink ? `${origin}${publicLink}` : null;
   const isOwner = collaborators.find((c) => c.userId === currentUserId)?.role === "owner";
 
+  // Debounced search-as-you-type, only while no one is selected yet — once
+  // selectedUser is set, the input shows their name and typing again clears
+  // the selection (see the onChange handler in the input below).
+  useEffect(() => {
+    if (selectedUser) return;
+    const trimmed = query.trim();
+    let cancelled = false;
+    // The <2-char "clear results" case is also deferred into the timer
+    // (rather than set synchronously here) so nothing calls setState
+    // directly in the effect body itself.
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      if (trimmed.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      setSearching(true);
+      searchUsers(projectId, trimmed)
+        .then((results) => {
+          if (!cancelled) setSearchResults(results);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, projectId, selectedUser]);
+
   async function handleInvite() {
-    if (!email.trim()) {
-      toast.error("Enter an email address");
+    if (!selectedUser) {
+      toast.error("Search for a person by name or email, then select them");
       return;
     }
     setInviting(true);
     try {
-      await inviteCollaborator(projectId, email.trim(), role);
-      toast.success(`Invited ${email.trim()} as ${role}`);
-      setEmail("");
-      await refresh();
+      await sendCollaborationInvite(projectId, selectedUser.id, role);
+      toast.success(`Invite sent to ${selectedUser.name} — they'll see it in their notifications.`);
+      setQuery("");
+      setSelectedUser(null);
+      setSearchResults([]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send invite");
     } finally {
       setInviting(false);
     }
@@ -167,28 +205,86 @@ function ShareDialogBody({ projectId }: { projectId: string }) {
 
       <div className="flex flex-col gap-4">
         {isOwner && (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="colleague@university.edu"
-              className="flex-1"
-            />
-            <div className="flex gap-2">
-              <Select value={role} onValueChange={(v) => v && setRole(v as Role)}>
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="editor">Editor</SelectItem>
-                  <SelectItem value="reviewer">Reviewer</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button onClick={handleInvite} disabled={inviting} className="shrink-0">
-                Invite
-              </Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {selectedUser ? (
+                <div className="flex flex-1 items-center gap-2 rounded-lg border bg-muted/30 px-2 py-1.5">
+                  <UserAvatar user={selectedUser} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{selectedUser.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{selectedUser.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => {
+                      setSelectedUser(null);
+                      setQuery("");
+                    }}
+                    title="Search for someone else"
+                  >
+                    <XIcon className="size-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="flex-1"
+                />
+              )}
+              <div className="flex gap-2">
+                <Select value={role} onValueChange={(v) => v && setRole(v as Role)}>
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="editor">Editor</SelectItem>
+                    <SelectItem value="reviewer">Reviewer</SelectItem>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleInvite} disabled={inviting || !selectedUser} className="shrink-0">
+                  Invite
+                </Button>
+              </div>
             </div>
+            {!selectedUser && query.trim().length >= 2 && (
+              <div className="rounded-lg border">
+                {searching ? (
+                  <div className="flex flex-col gap-1 p-2">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <p className="p-2.5 text-xs text-muted-foreground">
+                    No one found by that name or email — they may not have an account yet.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col">
+                    {searchResults.map((u) => (
+                      <li key={u.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUser(u);
+                            setSearchResults([]);
+                          }}
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-muted"
+                        >
+                          <UserAvatar user={u} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{u.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
 

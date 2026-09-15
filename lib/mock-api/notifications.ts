@@ -1,6 +1,25 @@
+// Same reasoning as collaboration.ts's own "use server" comment: this file's
+// exports were mock-only (safe to bundle client-side) until the real
+// Mongoose-backed branches below were added — those can only run server-side.
+"use server";
+
 import type { NotificationItem } from "@/lib/types";
 import { CURRENT_USER_ID, delay, id, mockDb } from "@/lib/mock-api/db";
 import { seedMockDb } from "@/lib/mock-api/seed";
+import { getDb } from "@/lib/db/mongoose";
+import { NotificationModel } from "@/lib/db/models/notifications";
+import { toNotificationItem } from "@/lib/db/notification-mapper";
+import { requireUserId } from "@/lib/db/require-user";
+
+// Same real-vs-legacy-mock id split duplicated in every lib/mock-api/*.ts
+// file that needs it (see collaboration.ts's own copy of this comment) — a
+// mock id is never a 24-char hex string, a real Mongo id always is. Used
+// here on userId/notificationId (not projectId) since notifications aren't
+// scoped to a single project.
+const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
+function isRealId(value: string): boolean {
+  return OBJECT_ID_RE.test(value);
+}
 
 function hoursAgo(n: number): string {
   return new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
@@ -88,6 +107,14 @@ function seedNotifications(): void {
 }
 
 export async function listNotifications(userId: string): Promise<NotificationItem[]> {
+  if (isRealId(userId)) {
+    await getDb();
+    const sessionUserId = await requireUserId();
+    if (sessionUserId !== userId) throw new Error("Not authorized: you can only view your own notifications");
+    const docs = await NotificationModel.find({ userId }).sort({ createdAt: -1 });
+    return docs.map(toNotificationItem);
+  }
+
   seedMockDb();
   seedNotifications();
   await delay();
@@ -97,12 +124,27 @@ export async function listNotifications(userId: string): Promise<NotificationIte
 }
 
 export async function markAsRead(notificationId: string): Promise<void> {
+  if (isRealId(notificationId)) {
+    await getDb();
+    const sessionUserId = await requireUserId();
+    await NotificationModel.updateOne({ _id: notificationId, userId: sessionUserId }, { read: true });
+    return;
+  }
+
   await delay(150);
   const notification = mockDb.notifications.find((n) => n.id === notificationId);
   if (notification) notification.read = true;
 }
 
 export async function markAllAsRead(userId: string): Promise<void> {
+  if (isRealId(userId)) {
+    await getDb();
+    const sessionUserId = await requireUserId();
+    if (sessionUserId !== userId) throw new Error("Not authorized: you can only update your own notifications");
+    await NotificationModel.updateMany({ userId }, { read: true });
+    return;
+  }
+
   await delay(250);
   for (const notification of mockDb.notifications) {
     if (notification.userId === userId) notification.read = true;

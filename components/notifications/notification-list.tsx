@@ -6,6 +6,9 @@ import type { NotificationItem as NotificationItemModel } from "@/lib/types";
 interface NotificationListProps {
   notifications: NotificationItemModel[];
   onMarkRead: (notificationId: string) => void;
+  /** Only needed where "share_invite" notifications can appear with real
+   * Accept/Decline actions (currently just the /notifications page). */
+  onRespondToInvite?: (notificationId: string, accept: boolean) => void;
   compact?: boolean;
   emptyMessage?: string;
 }
@@ -13,6 +16,7 @@ interface NotificationListProps {
 export function NotificationList({
   notifications,
   onMarkRead,
+  onRespondToInvite,
   compact,
   emptyMessage = "No notifications yet.",
 }: NotificationListProps) {
@@ -27,6 +31,7 @@ export function NotificationList({
           key={notification.id}
           notification={notification}
           onMarkRead={onMarkRead}
+          onRespondToInvite={onRespondToInvite}
           compact={compact}
         />
       ))}

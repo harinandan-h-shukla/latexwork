@@ -378,6 +378,9 @@ export interface NotificationItem {
   text: string;
   createdAt: string;
   read: boolean;
+  /** Only meaningful for kind "share_invite" — see NotificationModel's own comment. */
+  role?: Role;
+  inviteStatus?: "pending" | "accepted" | "declined";
 }
 
 export interface ApiKey {
